@@ -11,5 +11,5 @@ pub type BoxedError = Box<error::Error+Send+Sync>;
 /// Generic interface to a secret-storage backend.
 pub trait Backend {
     /// Get the value of the specified secret.
-    fn get(&self, credential: &str) -> Result<String, BoxedError>;
+    fn get(&mut self, credential: &str) -> Result<String, BoxedError>;
 }

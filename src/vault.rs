@@ -32,6 +32,8 @@ struct Client {
     /// Mapping from environment-variable-style names to locations in
     /// Vault.
     secretfile: Secretfile,
+    /// Local cache of secrets.
+    secrets: BTreeMap<String, Secret>,
 }
 
 impl Client {
@@ -45,6 +47,7 @@ impl Client {
             addr: try!(addr.into_url()),
             token: token.into(),
             secretfile: secretfile,
+            secrets: BTreeMap::new(),
         })
     }
 
@@ -62,19 +65,31 @@ impl Client {
 }
 
 impl Backend for Client {
-    fn get(&self, credential: &str) -> Result<String, BoxedError> {
+    fn get(&mut self, credential: &str) -> Result<String, BoxedError> {
         match self.secretfile.get(credential) {
             None => {
                 let msg = format!("No Secretfile entry for {}", credential);
                 Err(From::from(msg))
             }
             Some(&Location::Keyed(ref path, ref key)) => {
-                self.get_secret(path).and_then(|secret| {
-                    secret.data.get(key).ok_or_else(|| {
-                        let msg = format!("No key {} in secret {}", key, path);
-                        From::from(msg)
-                    }).map(|v| v.clone())
-                })
+                // If we haven't cached this secret, do so.  This is
+                // necessary to correctly support dynamic credentials,
+                // which may have more than one related key in a single
+                // secret, and fetching the secret once per key will result
+                // in mismatched username/password pairs or whatever.
+                if !self.secrets.contains_key(path) {
+                    let secret = try!(self.get_secret(path));
+                    self.secrets.insert(path.to_owned(), secret);
+                }
+
+                // Get the secret from our cache.  `unwrap` is safe here,
+                // because if we didn't have it, we grabbed it above.
+                let secret = self.secrets.get(path).unwrap();
+
+                // Look up the specified key in our secret's data bag.
+                secret.data.get(key).ok_or_else(|| {
+                    From::from(format!("No key {} in secret {}", key, path))
+                }).map(|v| v.clone())
             }
         }
     }
@@ -111,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_get() {
-        let client = test_client();
+        let mut client = test_client();
         assert_eq!("bar", client.get("FOO").unwrap());
     }
 }

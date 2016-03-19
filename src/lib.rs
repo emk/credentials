@@ -12,6 +12,7 @@
 extern crate hyper;
 #[macro_use]
 extern crate log;
+extern crate regex;
 extern crate rustc_serialize;
 #[cfg(test)] #[macro_use]
 extern crate yup_hyper_mock as hyper_mock;

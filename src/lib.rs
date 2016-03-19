@@ -23,6 +23,7 @@ use std::error::{self, Error};
 use std::fmt;
 
 mod backend;
+mod secretfile;
 mod vault;
 
 /// An error occurred accessing credentials.

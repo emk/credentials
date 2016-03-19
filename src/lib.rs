@@ -9,7 +9,12 @@
 //! ```
 
 #[macro_use]
+extern crate hyper;
+#[macro_use]
 extern crate log;
+extern crate rustc_serialize;
+#[cfg(test)] #[macro_use]
+extern crate yup_hyper_mock as hyper_mock;
 
 use std::convert::AsRef;
 use std::ops::Deref;
@@ -17,11 +22,14 @@ use std::env;
 use std::error::{self, Error};
 use std::fmt;
 
+mod backend;
+mod vault;
+
 /// An error occurred accessing credentials.
 #[derive(Debug)]
 pub struct CredentialError {
     credential: String,
-    original: Option<Box<error::Error+Send+Sync>>,
+    original: Option<backend::BoxedError>,
 }
 
 impl error::Error for CredentialError {

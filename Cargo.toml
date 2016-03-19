@@ -1,12 +1,12 @@
 [package]
-name = "credentials"
-version = "0.0.1"
 authors = ["Eric Kidd <git@randomhacks.net>"]
-
 description = "Access secure credentials at runtime from multiple backends (work in progress)"
 license = "Apache-2.0/MIT"
+name = "credentials"
 readme = "README.md"
-
 repository = "https://github.com/emk/credentials"
+version = "0.0.1"
 
 [dependencies]
+hyper = "0.8.0"
+log = "0.3.5"

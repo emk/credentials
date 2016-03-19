@@ -8,7 +8,9 @@ use std::io::{self, Write};
 use std::process;
 
 fn main() {
-    // Enable logging.  To see what's happening, set `RUST_LOG=trace`.
+    // Enable logging.  To see what's happening, set `RUST_LOG=trace`.  It
+    // is recommended that you include and initialie `env_logger` in your
+    // programs using credentials.
     env_logger::init().unwrap();
 
     // Print our each credential specified on the command line.

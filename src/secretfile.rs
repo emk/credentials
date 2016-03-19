@@ -10,7 +10,7 @@ use regex::Regex;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {
     // We'll use this for Keywhiz and other systems which store simple
     // string credentials.
@@ -20,7 +20,7 @@ pub enum Location {
     Keyed(String, String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Secretfile {
     mappings: BTreeMap<String, Location>,
 }

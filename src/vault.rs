@@ -1,10 +1,11 @@
 //! A very basic client for Hashicorp's Vault
 
+use backend::{Backend, BoxedError};
 use hyper;
 use rustc_serialize::json;
+use secretfile::{Location, Secretfile};
 use std::collections::BTreeMap;
 use std::io::Read;
-use backend::BoxedError;
 
 // Define our custom vault token header for use with hyper.
 header! { (XVaultToken, "X-Vault-Token") => [String] }
@@ -28,10 +29,14 @@ struct Client {
     addr: hyper::Url,
     /// The token which we'll use to access Vault.
     token: String,
+    /// Mapping from environment-variable-style names to locations in
+    /// Vault.
+    secretfile: Secretfile,
 }
 
 impl Client {
-    fn new<U,S>(client: hyper::Client, addr: U, token: S) ->
+    fn new<U,S>(client: hyper::Client, addr: U, token: S,
+                secretfile: Secretfile) ->
         Result<Client, BoxedError>
         where U: hyper::client::IntoUrl, S: Into<String>
     {
@@ -39,6 +44,7 @@ impl Client {
             client: client,
             addr: try!(addr.into_url()),
             token: token.into(),
+            secretfile: secretfile,
         })
     }
 
@@ -55,9 +61,30 @@ impl Client {
     }
 }
 
+impl Backend for Client {
+    fn get(&self, credential: &str) -> Result<String, BoxedError> {
+        match self.secretfile.get(credential) {
+            None => {
+                let msg = format!("No Secretfile entry for {}", credential);
+                Err(From::from(msg))
+            }
+            Some(&Location::Keyed(ref path, ref key)) => {
+                self.get_secret(path).and_then(|secret| {
+                    secret.data.get(key).ok_or_else(|| {
+                        let msg = format!("No key {} in secret {}", key, path);
+                        From::from(msg)
+                    }).map(|v| v.clone())
+                })
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use backend::Backend;
     use hyper;
+    use secretfile::Secretfile;
     use super::Client;
 
     mock_connector!(MockVault {
@@ -71,13 +98,20 @@ mod tests {
 
     fn test_client() -> Client {
         let h = hyper::Client::with_connector(MockVault::default());
-        Client::new(h, "http://127.0.0.1", "123").unwrap()
-    } 
+        let secretfile = Secretfile::from_str("FOO secret/foo:value").unwrap();
+        Client::new(h, "http://127.0.0.1", "123", secretfile).unwrap()
+    }
 
     #[test]
     fn test_get_secret() {
         let client = test_client();
         let secret = client.get_secret("secret/foo").unwrap();
         assert_eq!("bar", secret.data.get("value").unwrap());
+    }
+
+    #[test]
+    fn test_get() {
+        let client = test_client();
+        assert_eq!("bar", client.get("FOO").unwrap());
     }
 }

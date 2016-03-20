@@ -2,7 +2,7 @@
 authors = ["Eric Kidd <git@randomhacks.net>"]
 description = "Fetch secrets from either environment variables or Hashicorp's Vault"
 documentation = "http://docs.randomhacks.net/credentials/"
-license = "Apache-2.0/MIT"
+license = "CC0-1.0"
 name = "credentials"
 readme = "README.md"
 repository = "https://github.com/emk/credentials"

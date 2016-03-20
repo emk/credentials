@@ -1,5 +1,7 @@
 # credentials: Fetch secrets from the environment or from Vault
 
+[![Latest version](https://img.shields.io/crates/v/credentials.svg)](https://crates.io/crates/credentials) [![License](https://img.shields.io/crates/l/credentials.svg)](https://creativecommons.org/publicdomain/zero/1.0/) [![Build Status](https://travis-ci.org/emk/credentials.svg?branch=master)](https://travis-ci.org/emk/credentials)
+
 A [twelve-factor app][12factor] (as popularized by Heroku) would normally
 store any passwords or other secrets in environment variables.  The
 alternative would be to include the passwords directly in the source code,

@@ -1,6 +1,7 @@
 [package]
 authors = ["Eric Kidd <git@randomhacks.net>"]
-description = "Access secure credentials at runtime from multiple backends (work in progress)"
+description = "Fetch secrets from either environment variables or Hashicorp's Vault"
+documentation = "http://docs.randomhacks.net/credentials/"
 license = "Apache-2.0/MIT"
 name = "credentials"
 readme = "README.md"
@@ -17,3 +18,6 @@ rustc-serialize = "0.3.18"
 [dev-dependencies]
 env_logger = "0.3.2"
 yup-hyper-mock = "1.3.2"
+
+[features]
+unstable = []

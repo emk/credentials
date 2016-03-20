@@ -1,6 +1,6 @@
 //! A backend which reads from environment variables.
 
-use backend::{Backend, BoxedError, err};
+use backend::{Backend, BoxedError};
 use std::env;
 
 /// Fetches credentials from environment variables.
@@ -8,8 +8,8 @@ pub struct Client;
 
 impl Client {
     /// Create a new environment variable client.
-    pub fn new() -> Client {
-        Client
+    pub fn new_default() -> Result<Client, BoxedError> {
+        Ok(Client)
     }
 }
 
@@ -21,7 +21,7 @@ impl Backend for Client {
 
 #[test]
 fn test_get() {
-    let mut client = Client::new();
+    let mut client = Client::new_default().unwrap();
     env::set_var("FOO_USERNAME", "user");
     assert_eq!("user", client.get("FOO_USERNAME").unwrap());
     assert!(client.get("NOSUCHVAR").is_err());

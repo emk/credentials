@@ -68,6 +68,8 @@ impl Secretfile {
         Ok(sf)
     }
 
+    /// Read a Secretfile from a string.  Currently only used for testing.
+    #[cfg(test)]
     pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile, BoxedError> {
         let mut cursor = io::Cursor::new(s.as_ref().as_bytes());
         Secretfile::read(&mut cursor)

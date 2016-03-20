@@ -15,7 +15,7 @@ pub fn err<T: Into<String>>(message: T) -> BoxedError {
 }
 
 /// Generic interface to a secret-storage backend.
-pub trait Backend {
+pub trait Backend: Send + Sync {
     /// Get the value of the specified secret.
     fn get(&mut self, credential: &str) -> Result<String, BoxedError>;
 }

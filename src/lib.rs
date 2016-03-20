@@ -24,6 +24,7 @@ use std::error::{self, Error};
 use std::fmt;
 
 mod backend;
+mod envvar;
 mod secretfile;
 mod vault;
 

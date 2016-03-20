@@ -65,6 +65,9 @@ pub struct Client {
 }
 
 impl Client {
+    /// Construct a new vault::Client, attempting to use the same
+    /// environment variables and files used by the `vault` CLI tool and
+    /// the Ruby `vault` gem.
     pub fn new_from_env() -> Result<Client, BoxedError> {
         Client::new(hyper::Client::new(),
                     &try!(default_addr()),

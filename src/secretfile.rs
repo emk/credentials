@@ -6,7 +6,7 @@
 //! key `"password"`.
 
 use backend::{BoxedError, err};
-use regex::Regex;
+use regex::{Captures, Regex};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
@@ -20,6 +20,39 @@ pub enum Location {
     /// We use this for systems like Vault which store key-value
     /// dictionaries in each secret.
     Keyed(String, String),
+}
+
+/// Interpolate environment variables into a string.
+fn interpolate_env_vars(text: &str) -> Result<String, BoxedError> {
+    // Only compile this Regex once.
+    lazy_static! {
+        static ref RE: Regex =
+            Regex::new(r"\$(?:(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)|\{(?P<name2>[a-zA-Z_][a-zA-Z0-9_]*)\})").unwrap();
+    }
+
+    // Perform the replacement.  This is mostly error-handling logic,
+    // because `replace_all` doesn't anticipate any errors.
+    let mut undefined_env_var = None;
+    let result = RE.replace_all(text, |caps: &Captures| {
+        let name =
+            caps.name("name").or_else(|| { caps.name("name2") }).unwrap();
+        match env::var(name) {
+            Ok(s) => s.to_owned(),
+            Err(_) => {
+                undefined_env_var = Some(name.to_owned());
+                "".to_owned()
+            }
+        }
+    });
+    match undefined_env_var {
+        None => Ok(result),
+        Some(var) => {
+            let msg =
+                format!("Secretfile: Environment variable {} is not defined",
+                        var);
+            Err(err(msg))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -51,7 +84,7 @@ impl Secretfile {
             match re.captures(&line) {
                 Some(ref caps) if caps.name("name").is_some() => {
                     let location = Location::Keyed(
-                        caps.name("path").unwrap().to_owned(),
+                        try!(interpolate_env_vars(caps.name("path").unwrap())),
                         caps.name("key").unwrap().to_owned(),
                     );
                     sf.mappings.insert(caps.name("name").unwrap().to_owned(),
@@ -93,9 +126,10 @@ fn test_parse() {
     let data = "\
 # This is a comment.
 
-FOO_USERNAME secret/foo:username\n\
-FOO_PASSWORD secret/foo:password\n\
+FOO_USERNAME secret/$SECRET_NAME:username\n\
+FOO_PASSWORD secret/${SECRET_NAME}:password\n\
 ";
+    env::set_var("SECRET_NAME", "foo");
     let secretfile = Secretfile::from_str(data).unwrap();
     assert_eq!(&Location::Keyed("secret/foo".to_owned(), "username".to_owned()),
                secretfile.get("FOO_USERNAME").unwrap());

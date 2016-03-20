@@ -45,8 +45,18 @@ To access it, you'll need to create a `Secretfile` in the directory from
 which you run your application:
 
 ```
+# Comments are allowed.
 EXAMPLE_USERNAME secret/example:username
 EXAMPLE_PASSWORD secret/example:password
+```
+
+If you have per-environment secrets, you can interpolate environment
+variables into the path portion of the `Secretfile` using `$VAR` or
+`${VAR}`:
+
+```
+PG_USERNAME postgresql/$VAULT_ENV/creds/readonly:username
+PG_PASSWORD postgresql/$VAULT_ENV/creds/readonly:password
 ```
 
 As before, you can access these secrets using:
@@ -54,6 +64,9 @@ As before, you can access these secrets using:
 ```rust
 credentials::get("EXAMPLE_USERNAME").unwrap();
 credentials::get("EXAMPLE_PASSWORD").unwrap();
+
+credentials::get("PG_USERNAME").unwrap();
+credentials::get("PG_PASSWORD").unwrap();
 ```
 
 ## Example code
@@ -64,7 +77,7 @@ See [the `examples` directory](/examples) for complete, working code.
 
 The following features remain to be implemented:
 
-- Environment variable interpolation in `Secretfile`.
+- Honor Vault TTLs.
 - Keywhiz support.
 
 ## Contributions

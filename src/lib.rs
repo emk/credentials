@@ -1,5 +1,8 @@
 //! Access secure credentials at runtime with multiple backends.
 //!
+//! For more information, see [the
+//! homepage](https://github.com/emk/credentials).
+//!
 //! ```
 //! use credentials;
 //! use std::env;

@@ -1,14 +1,42 @@
 //! A very basic client for Hashicorp's Vault
 
-use backend::{Backend, BoxedError};
+use backend::{Backend, BoxedError, err};
 use hyper;
 use rustc_serialize::json;
 use secretfile::{Location, Secretfile};
 use std::collections::BTreeMap;
+use std::env;
+use std::fs::File;
 use std::io::Read;
 
 // Define our custom vault token header for use with hyper.
 header! { (XVaultToken, "X-Vault-Token") => [String] }
+
+/// The default vault server address.
+fn default_addr() -> Result<String, BoxedError> {
+    env::var("VAULT_ADDR").map_err(|_| {
+        err("VAULT_ADDR not specified")
+    })
+}
+
+/// The default vault token.
+fn default_token() -> Result<String, BoxedError> {
+    env::var("VAULT_TOKEN").or_else(|_| {
+        // Build a path to ~/.vault-token.
+        let mut path = try!(env::home_dir().ok_or_else(|| {
+            return err("Can't find home directory")
+        }));
+        path.push(".vault-token");
+
+        // Read the file.
+        let mut f = try!(File::open(path));
+        let mut token = String::new();
+        try!(f.read_to_string(&mut token));
+        Ok(token)
+    }).map_err(|_: BoxedError| {
+        err("Cannot get either VAULT_TOKEN or ~/.vault_token")
+    })
+}
 
 /// Secret data retrieved from Vault.  This has a bunch more fields, but
 /// the exact list of fields doesn't seem to be documented anywhere, so
@@ -22,7 +50,7 @@ struct Secret {
 }
 
 /// A basic Vault client.
-struct Client {
+pub struct Client {
     /// Our HTTP client.  This can be configured to mock out the network.
     client: hyper::Client,
     /// The address of our Vault server.
@@ -37,6 +65,13 @@ struct Client {
 }
 
 impl Client {
+    pub fn new_from_env() -> Result<Client, BoxedError> {
+        Client::new(hyper::Client::new(),
+                    &try!(default_addr()),
+                    try!(default_token()),
+                    try!(Secretfile::default()))
+    }
+
     fn new<U,S>(client: hyper::Client, addr: U, token: S,
                 secretfile: Secretfile) ->
         Result<Client, BoxedError>
@@ -69,7 +104,7 @@ impl Backend for Client {
         match self.secretfile.get(credential) {
             None => {
                 let msg = format!("No Secretfile entry for {}", credential);
-                Err(From::from(msg))
+                Err(err(msg))
             }
             Some(&Location::Keyed(ref path, ref key)) => {
                 // If we haven't cached this secret, do so.  This is
@@ -88,7 +123,7 @@ impl Backend for Client {
 
                 // Look up the specified key in our secret's data bag.
                 secret.data.get(key).ok_or_else(|| {
-                    From::from(format!("No key {} in secret {}", key, path))
+                    err(format!("No key {} in secret {}", key, path))
                 }).map(|v| v.clone())
             }
         }

@@ -5,9 +5,11 @@
 //! keys: from `MY_SECRET_PASSWORD` to the path `secret/my_secret` and the
 //! key `"password"`.
 
-use backend::BoxedError;
+use backend::{BoxedError, err};
 use regex::Regex;
 use std::collections::BTreeMap;
+use std::env;
+use std::fs::File;
 use std::io::{self, BufRead};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,7 +61,7 @@ impl Secretfile {
                 _ => {
                     let msg =
                         format!("Error parsing Secretfile line: {}", &line);
-                    return Err(From::from(msg));
+                    return Err(err(msg));
                 }
             }
         }
@@ -70,6 +72,14 @@ impl Secretfile {
         let mut cursor = io::Cursor::new(s.as_ref().as_bytes());
         Secretfile::read(&mut cursor)
     }
+
+    /// The default Secretfile.
+    pub fn default() -> Result<Secretfile, BoxedError> {
+        let mut path = try!(env::current_dir());
+        path.push("Secretfile");
+        Secretfile::read(&mut try!(File::open(path)))
+    }
+
 
     pub fn get(&self, name: &str) -> Option<&Location> {
         self.mappings.get(name)

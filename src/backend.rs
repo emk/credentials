@@ -8,6 +8,12 @@ use std::error;
 /// things fail (at least not at this level).
 pub type BoxedError = Box<error::Error+Send+Sync>;
 
+/// Create a `BoxedError` with a simple string error.  We use this for
+/// internal errors that we want to keep simple.
+pub fn err<T: Into<String>>(message: T) -> BoxedError {
+    From::from(message.into())
+}
+
 /// Generic interface to a secret-storage backend.
 pub trait Backend {
     /// Get the value of the specified secret.

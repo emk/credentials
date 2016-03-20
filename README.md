@@ -78,7 +78,8 @@ See [the `examples` directory](/examples) for complete, working code.
 The following features remain to be implemented:
 
 - Honor Vault TTLs.
-- Keywhiz support.
+- Keywhiz support.  The big obstacle here is that I can't get Keywhiz
+  keystore stuff working correctly using `curl`.
 
 ## Contributions
 

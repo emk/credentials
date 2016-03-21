@@ -2,6 +2,7 @@
 
 use backend::{Backend, BoxedError, err};
 use hyper;
+use hyper::header::Connection;
 use rustc_serialize::json;
 use secretfile::{Location, Secretfile};
 use std::collections::BTreeMap;
@@ -98,6 +99,9 @@ impl Client {
         let url = try!(self.addr.join(&format!("v1/{}", path)));
 
         let req = self.client.get(url)
+            // Leaving the connection open will cause errors on reconnect
+            // after inactivity.
+            .header(Connection::close())
             .header(XVaultToken(self.token.clone()));
         let mut res = try!(req.send());
 

@@ -113,7 +113,7 @@ impl Client {
 
 impl Backend for Client {
     fn get(&mut self, credential: &str) -> Result<String, BoxedError> {
-        match self.secretfile.get(credential) {
+        match self.secretfile.var(credential) {
             None => {
                 Err(err!("No Secretfile entry for {}", credential))
             }
@@ -136,6 +136,10 @@ impl Backend for Client {
                 secret.data.get(key).ok_or_else(|| {
                     err!("No key {} in secret {}", key, path)
                 }).map(|v| v.clone())
+            }
+            Some(&Location::Simple(ref path)) => {
+                Err(err!("The path \"{}\" is missing a \":key\" component",
+                         path))
             }
         }
     }

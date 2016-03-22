@@ -11,19 +11,36 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead};
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {
-    // We'll use this for Keywhiz and other systems which store simple
-    // string credentials.
-    //Simple(String),
-    /// We use this for systems like Vault which store key-value
-    /// dictionaries in each secret.
+    // Used for systems which identify credentials with simple string keys.
+    Simple(String),
+    /// Used for systems like Vault where a path _and_ a hash key are
+    /// needed to identify a specific credential.
     Keyed(String, String),
 }
 
+impl Location {
+    /// Create a new `Location` from a regex `Captures` containing the
+    /// named match `path` and optionally `key`.
+    fn from_caps<'a>(caps: &Captures<'a>) -> Result<Location, BoxedError> {
+        match (caps.name("path"), caps.name("key")) {
+            (Some(path), None) =>
+                Ok(Location::Simple(try!(interpolate_env(path)))),
+            (Some(path), Some(key)) =>
+                Ok(Location::Keyed(try!(interpolate_env(path)),
+                                   key.to_owned())),
+            (_, _) =>
+                Err(err!("Could not parse location in Secretfile: {}",
+                         caps.at(0).unwrap())),
+        }
+    }
+}
+
 /// Interpolate environment variables into a string.
-fn interpolate_env_vars(text: &str) -> Result<String, BoxedError> {
+fn interpolate_env(text: &str) -> Result<String, BoxedError> {
     // Only compile this Regex once.
     lazy_static! {
         static ref RE: Regex =
@@ -46,74 +63,96 @@ fn interpolate_env_vars(text: &str) -> Result<String, BoxedError> {
     });
     match undefined_env_var {
         None => Ok(result),
-        Some(var) => {
+        Some(var) =>
             Err(err!("Secretfile: Environment variable {} is not defined", var))
-        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Secretfile {
-    mappings: BTreeMap<String, Location>,
+    vars: BTreeMap<String, Location>,
+    files: BTreeMap<String, Location>,
 }
 
 impl Secretfile {
     /// Read in from an `io::Read` object.
     pub fn read(read: &mut io::Read) -> Result<Secretfile, BoxedError> {
-        // Match a line of our file.
-        let re = Regex::new(r"(?x)
+        // Only compile this Regex once.
+        lazy_static! {
+            // Match an individual line in a Secretfile.
+            static ref RE: Regex = Regex::new(r"(?x)
 ^(?:
    # Blank line with optional comment.
    \s*(?:\#.*)?
  |
-   # NAME path/to/secret:key
-   (?P<name>\S+)
+   (?:
+     # VAR
+     (?P<var>[a-zA-Z_][a-zA-Z0-9_]*)
+   |
+     # >file
+     >(?P<file>\S+)
+   )
    \s+
-   (?P<path>\S+?):(?P<key>\S+)
+   # path/to/secret:key
+   (?P<path>\S+?)(?::(?P<key>\S+))?
    \s*
  )$").unwrap();
+        }
 
-        // TODO: Environment interpolation.
-        let mut sf = Secretfile { mappings: BTreeMap::new() };
+        let mut sf = Secretfile {
+            vars: BTreeMap::new(),
+            files: BTreeMap::new(),
+        };
         let buffer = io::BufReader::new(read);
         for line_or_err in buffer.lines() {
             let line = try!(line_or_err);
-            match re.captures(&line) {
-                Some(ref caps) if caps.name("name").is_some() => {
-                    let location = Location::Keyed(
-                        try!(interpolate_env_vars(caps.name("path").unwrap())),
-                        caps.name("key").unwrap().to_owned(),
-                    );
-                    sf.mappings.insert(caps.name("name").unwrap().to_owned(),
-                                       location);
+            match RE.captures(&line) {
+                Some(ref caps) if caps.name("path").is_some() => {
+                    let location = try!(Location::from_caps(caps));
+                    if caps.name("file").is_some() {
+                        let file =
+                            try!(interpolate_env(caps.name("file").unwrap()));
+                        sf.files.insert(file, location);
+                    } else if caps.name("var").is_some() {
+                        let var = caps.name("var").unwrap().to_owned();
+                        sf.vars.insert(var, location);
+                    }
                 }
                 Some(_) => { /* Blank or comment */ },
-                _ => {
-                    return Err(err!("Error parsing Secretfile line: {}",
-                                    &line));
-                }
+                _ =>
+                    return Err(err!("Error parsing Secretfile line: {}", &line)),
             }
         }
         Ok(sf)
     }
 
-    /// Read a Secretfile from a string.  Currently only used for testing.
-    #[cfg(test)]
+    /// Read a `Secretfile` from a string.  Currently only used for testing.
     pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile, BoxedError> {
         let mut cursor = io::Cursor::new(s.as_ref().as_bytes());
         Secretfile::read(&mut cursor)
     }
 
-    /// The default Secretfile.
-    pub fn default() -> Result<Secretfile, BoxedError> {
-        let mut path = try!(env::current_dir());
-        path.push("Secretfile");
+    /// Load the `Secretfile` at the specified path.
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile, BoxedError>
+    {
         Secretfile::read(&mut try!(File::open(path)))
     }
 
+    /// Load the default `Secretfile`.
+    pub fn default() -> Result<Secretfile, BoxedError> {
+        let mut path = try!(env::current_dir());
+        path.push("Secretfile");
+        Secretfile::from_path(path)
+    }
 
-    pub fn get(&self, name: &str) -> Option<&Location> {
-        self.mappings.get(name)
+    /// Fetch the backend path for a variable listed in a `Secretfile`.
+    pub fn var(&self, name: &str) -> Option<&Location> {
+        self.vars.get(name)
+    }
+
+    /// Fetch the backend path for a file listed in a `Secretfile`.
+    pub fn file(&self, name: &str) -> Option<&Location> {
+        self.files.get(name)
     }
 }
 
@@ -124,11 +163,22 @@ fn test_parse() {
 
 FOO_USERNAME secret/$SECRET_NAME:username\n\
 FOO_PASSWORD secret/${SECRET_NAME}:password\n\
+
+# Try a Keywhiz-style secret, too.
+FOO_USERNAME2 ${SECRET_NAME}_username\n\
+
+# Credentials to copy to a file.  Interpolation allowed on the left here.
+>$SOMEDIR/.conf/key.pem secret/ssl:key_pem\n\
 ";
     env::set_var("SECRET_NAME", "foo");
+    env::set_var("SOMEDIR", "/home/foo");
     let secretfile = Secretfile::from_str(data).unwrap();
     assert_eq!(&Location::Keyed("secret/foo".to_owned(), "username".to_owned()),
-               secretfile.get("FOO_USERNAME").unwrap());
+               secretfile.var("FOO_USERNAME").unwrap());
     assert_eq!(&Location::Keyed("secret/foo".to_owned(), "password".to_owned()),
-               secretfile.get("FOO_PASSWORD").unwrap());
+               secretfile.var("FOO_PASSWORD").unwrap());
+    assert_eq!(&Location::Simple("foo_username".to_owned()),
+               secretfile.var("FOO_USERNAME2").unwrap());
+    assert_eq!(&Location::Keyed("secret/ssl".to_owned(), "key_pem".to_owned()),
+               secretfile.file("/home/foo/.conf/key.pem").unwrap());
 }

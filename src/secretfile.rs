@@ -7,9 +7,10 @@
 
 use backend::{BoxedError, err};
 use regex::{Captures, Regex};
-use std::collections::BTreeMap;
+use std::collections::{btree_map, BTreeMap};
 use std::env;
 use std::fs::File;
+use std::iter::Iterator;
 use std::io::{self, BufRead};
 use std::path::Path;
 
@@ -73,8 +74,8 @@ fn interpolate_env(text: &str) -> Result<String, BoxedError> {
 
 #[derive(Debug, Clone)]
 pub struct Secretfile {
-    vars: BTreeMap<String, Location>,
-    files: BTreeMap<String, Location>,
+    varmap: BTreeMap<String, Location>,
+    filemap: BTreeMap<String, Location>,
 }
 
 impl Secretfile {
@@ -103,8 +104,8 @@ impl Secretfile {
         }
 
         let mut sf = Secretfile {
-            vars: BTreeMap::new(),
-            files: BTreeMap::new(),
+            varmap: BTreeMap::new(),
+            filemap: BTreeMap::new(),
         };
         let buffer = io::BufReader::new(read);
         for line_or_err in buffer.lines() {
@@ -115,10 +116,10 @@ impl Secretfile {
                     if caps.name("file").is_some() {
                         let file =
                             try!(interpolate_env(caps.name("file").unwrap()));
-                        sf.files.insert(file, location);
+                        sf.filemap.insert(file, location);
                     } else if caps.name("var").is_some() {
                         let var = caps.name("var").unwrap().to_owned();
-                        sf.vars.insert(var, location);
+                        sf.varmap.insert(var, location);
                     }
                 }
                 Some(_) => { /* Blank or comment */ },
@@ -147,6 +148,17 @@ impl Secretfile {
         path.push("Secretfile");
         Secretfile::from_path(path)
     }
+
+    /// Return an iterator over the environment variables listed in this
+    /// file.
+    pub fn vars(&self) -> SecretfileKeys {
+        SecretfileKeys { keys: self.varmap.keys() }
+    }
+
+    /// Return an iterator over the credential files listed in this file.
+    pub fn files(&self) -> SecretfileKeys {
+        SecretfileKeys { keys: self.filemap.keys() }
+    }
 }
 
 /// Internal methods for looking up `Location`s in `Secretfile`.  These are
@@ -162,11 +174,30 @@ pub trait SecretfileLookup {
 
 impl SecretfileLookup for Secretfile {
     fn var(&self, name: &str) -> Option<&Location> {
-        self.vars.get(name)
+        self.varmap.get(name)
     }
 
     fn file(&self, name: &str) -> Option<&Location> {
-        self.files.get(name)
+        self.filemap.get(name)
+    }
+}
+
+/// An iterator over the keys mentioned in a `Secretfile`.
+#[derive(Clone)]
+pub struct SecretfileKeys<'a> {
+    /// Our actual iterator, wrapped up only so that we don't need to
+    /// expose the underlying implementation type in our stable API.
+    keys: btree_map::Keys<'a, String, Location>,
+}
+
+// 'a is a lifetime specifier bound to the underlying collection we're
+// iterating over, which keeps anybody from modifying it while we
+// iterating.
+impl<'a> Iterator for SecretfileKeys<'a> {
+    type Item = &'a String;
+
+    fn next(&mut self) -> Option<&'a String> {
+        self.keys.next()
     }
 }
 
@@ -198,4 +229,9 @@ FOO_USERNAME2 ${SECRET_NAME}_username\n\
     assert_eq!(&Location::PathWithKey("secret/ssl".to_owned(),
                                       "key_pem".to_owned()),
                secretfile.file("/home/foo/.conf/key.pem").unwrap());
+
+    assert_eq!(vec!("FOO_PASSWORD", "FOO_USERNAME", "FOO_USERNAME2"),
+               secretfile.vars().collect::<Vec<_>>());
+    assert_eq!(vec!("/home/foo/.conf/key.pem"),
+               secretfile.files().collect::<Vec<_>>());
 }

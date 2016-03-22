@@ -29,6 +29,7 @@ use std::error::{self, Error};
 use std::fmt;
 use std::sync::{Mutex, MutexGuard};
 
+#[macro_use]
 mod backend;
 mod chained;
 mod envvar;
@@ -84,7 +85,7 @@ fn get_inner(key: &str) -> Result<String, BoxedError> {
     // a few minutes to get this past the borrow checker.
     match backend_result.deref_mut() {
         &mut Ok(ref mut backend) => backend.get(key),
-        &mut Err(ref e) => Err(err(format!("Could not initialize: {}", e))),
+        &mut Err(ref e) => Err(err!("Could not initialize: {}", e)),
     }
 }
 

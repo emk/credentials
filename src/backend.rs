@@ -14,6 +14,12 @@ pub fn err<T: Into<String>>(message: T) -> BoxedError {
     From::from(message.into())
 }
 
+/// Create a `BoxedError` from a format string and format arguments.
+macro_rules! err {
+    ($fmt:expr, $( $arg:expr ),*) =>
+        ($crate::backend::err(format!($fmt, $( $arg ),*)));
+}
+
 /// Generic interface to a secret-storage backend.
 pub trait Backend: Send + Sync {
     /// Get the value of the specified secret.

@@ -47,10 +47,7 @@ fn interpolate_env_vars(text: &str) -> Result<String, BoxedError> {
     match undefined_env_var {
         None => Ok(result),
         Some(var) => {
-            let msg =
-                format!("Secretfile: Environment variable {} is not defined",
-                        var);
-            Err(err(msg))
+            Err(err!("Secretfile: Environment variable {} is not defined", var))
         }
     }
 }
@@ -92,9 +89,8 @@ impl Secretfile {
                 }
                 Some(_) => { /* Blank or comment */ },
                 _ => {
-                    let msg =
-                        format!("Error parsing Secretfile line: {}", &line);
-                    return Err(err(msg));
+                    return Err(err!("Error parsing Secretfile line: {}",
+                                    &line));
                 }
             }
         }

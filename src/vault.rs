@@ -115,8 +115,7 @@ impl Backend for Client {
     fn get(&mut self, credential: &str) -> Result<String, BoxedError> {
         match self.secretfile.get(credential) {
             None => {
-                let msg = format!("No Secretfile entry for {}", credential);
-                Err(err(msg))
+                Err(err!("No Secretfile entry for {}", credential))
             }
             Some(&Location::Keyed(ref path, ref key)) => {
                 // If we haven't cached this secret, do so.  This is
@@ -135,7 +134,7 @@ impl Backend for Client {
 
                 // Look up the specified key in our secret's data bag.
                 secret.data.get(key).ok_or_else(|| {
-                    err(format!("No key {} in secret {}", key, path))
+                    err!("No key {} in secret {}", key, path)
                 }).map(|v| v.clone())
             }
         }

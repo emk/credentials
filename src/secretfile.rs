@@ -16,10 +16,10 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {
     // Used for systems which identify credentials with simple string keys.
-    Simple(String),
+    Path(String),
     /// Used for systems like Vault where a path _and_ a hash key are
     /// needed to identify a specific credential.
-    Keyed(String, String),
+    PathWithKey(String, String),
 }
 
 impl Location {
@@ -28,10 +28,10 @@ impl Location {
     fn from_caps<'a>(caps: &Captures<'a>) -> Result<Location, BoxedError> {
         match (caps.name("path"), caps.name("key")) {
             (Some(path), None) =>
-                Ok(Location::Simple(try!(interpolate_env(path)))),
+                Ok(Location::Path(try!(interpolate_env(path)))),
             (Some(path), Some(key)) =>
-                Ok(Location::Keyed(try!(interpolate_env(path)),
-                                   key.to_owned())),
+                Ok(Location::PathWithKey(try!(interpolate_env(path)),
+                                         key.to_owned())),
             (_, _) =>
                 Err(err!("Could not parse location in Secretfile: {}",
                          caps.at(0).unwrap())),
@@ -173,12 +173,15 @@ FOO_USERNAME2 ${SECRET_NAME}_username\n\
     env::set_var("SECRET_NAME", "foo");
     env::set_var("SOMEDIR", "/home/foo");
     let secretfile = Secretfile::from_str(data).unwrap();
-    assert_eq!(&Location::Keyed("secret/foo".to_owned(), "username".to_owned()),
+    assert_eq!(&Location::PathWithKey("secret/foo".to_owned(),
+                                      "username".to_owned()),
                secretfile.var("FOO_USERNAME").unwrap());
-    assert_eq!(&Location::Keyed("secret/foo".to_owned(), "password".to_owned()),
+    assert_eq!(&Location::PathWithKey("secret/foo".to_owned(),
+                                      "password".to_owned()),
                secretfile.var("FOO_PASSWORD").unwrap());
-    assert_eq!(&Location::Simple("foo_username".to_owned()),
+    assert_eq!(&Location::Path("foo_username".to_owned()),
                secretfile.var("FOO_USERNAME2").unwrap());
-    assert_eq!(&Location::Keyed("secret/ssl".to_owned(), "key_pem".to_owned()),
+    assert_eq!(&Location::PathWithKey("secret/ssl".to_owned(),
+                                      "key_pem".to_owned()),
                secretfile.file("/home/foo/.conf/key.pem").unwrap());
 }

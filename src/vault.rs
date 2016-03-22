@@ -117,7 +117,7 @@ impl Backend for Client {
             None => {
                 Err(err!("No Secretfile entry for {}", credential))
             }
-            Some(&Location::Keyed(ref path, ref key)) => {
+            Some(&Location::PathWithKey(ref path, ref key)) => {
                 // If we haven't cached this secret, do so.  This is
                 // necessary to correctly support dynamic credentials,
                 // which may have more than one related key in a single
@@ -137,7 +137,7 @@ impl Backend for Client {
                     err!("No key {} in secret {}", key, path)
                 }).map(|v| v.clone())
             }
-            Some(&Location::Simple(ref path)) => {
+            Some(&Location::Path(ref path)) => {
                 Err(err!("The path \"{}\" is missing a \":key\" component",
                          path))
             }

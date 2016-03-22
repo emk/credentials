@@ -16,8 +16,8 @@ pub fn err<T: Into<String>>(message: T) -> BoxedError {
 
 /// Create a `BoxedError` from a format string and format arguments.
 macro_rules! err {
-    ($fmt:expr, $( $arg:expr ),*) =>
-        ($crate::backend::err(format!($fmt, $( $arg ),*)));
+    ($( $e:expr ),*) =>
+        ($crate::backend::err(format!($( $e ),*)));
 }
 
 /// Generic interface to a secret-storage backend.

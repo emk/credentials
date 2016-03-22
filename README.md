@@ -17,8 +17,8 @@ Wherever you choose to store your secrets, this library is intended to
 provide a single, unified API:
 
 ```rust
-credentials::get("EXAMPLE_USERNAME").unwrap();
-credentials::get("EXAMPLE_PASSWORD").unwrap();
+credentials::var("EXAMPLE_USERNAME").unwrap();
+credentials::var("EXAMPLE_PASSWORD").unwrap();
 ```
 
 By default, this will return the values of the `EXAMPLE_USERNAME`
@@ -62,11 +62,11 @@ PG_PASSWORD postgresql/$VAULT_ENV/creds/readonly:password
 As before, you can access these secrets using:
 
 ```rust
-credentials::get("EXAMPLE_USERNAME").unwrap();
-credentials::get("EXAMPLE_PASSWORD").unwrap();
+credentials::var("EXAMPLE_USERNAME").unwrap();
+credentials::var("EXAMPLE_PASSWORD").unwrap();
 
-credentials::get("PG_USERNAME").unwrap();
-credentials::get("PG_PASSWORD").unwrap();
+credentials::var("PG_USERNAME").unwrap();
+credentials::var("PG_PASSWORD").unwrap();
 ```
 
 ## Example code

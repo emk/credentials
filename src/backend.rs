@@ -23,5 +23,8 @@ macro_rules! err {
 /// Generic interface to a secret-storage backend.
 pub trait Backend: Send + Sync {
     /// Get the value of the specified secret.
-    fn get(&mut self, credential: &str) -> Result<String, BoxedError>;
+    fn var(&mut self, credential: &str) -> Result<String, BoxedError>;
+
+    /// Get the value of the specified credential file.
+    fn file(&mut self, path: &str) -> Result<String, BoxedError>;
 }

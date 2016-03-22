@@ -8,7 +8,7 @@
 //! use std::env;
 //!
 //! env::set_var("PASSWORD", "secret");
-//! assert_eq!("secret", credentials::get("PASSWORD").unwrap());
+//! assert_eq!("secret", credentials::var("PASSWORD").unwrap());
 //! ```
 
 #[macro_use]
@@ -77,8 +77,8 @@ impl fmt::Display for CredentialError {
     }
 }
 
-/// Helper function for `get`, below.
-fn get_inner(key: &str) -> Result<String, BoxedError> {
+/// Helper function for `var`, below.
+fn var_inner(key: &str) -> Result<String, BoxedError> {
     // This is a bit subtle: First we need to lock our Mutex, and then--if
     // our Mutex was poisoned by a panic in another thread--we want to
     // propagate the panic in this thread using `unwrap()`.  See
@@ -89,16 +89,16 @@ fn get_inner(key: &str) -> Result<String, BoxedError> {
     // if it was initialized correctly.  I had to tweak the `mut` bits for
     // a few minutes to get this past the borrow checker.
     match backend_result.deref_mut() {
-        &mut Ok(ref mut backend) => backend.get(key),
+        &mut Ok(ref mut backend) => backend.var(key),
         &mut Err(ref e) => Err(err!("Could not initialize: {}", e)),
     }
 }
 
 /// Fetch the value of a credential.
-pub fn get<K: AsRef<str>>(key: K) -> Result<String, CredentialError> {
+pub fn var<K: AsRef<str>>(key: K) -> Result<String, CredentialError> {
     let key_ref = key.as_ref();
     trace!("getting secure credential {}", key_ref);
-    get_inner(key.as_ref()).map_err(|e| {
+    var_inner(key.as_ref()).map_err(|e| {
         let err = CredentialError {
             credential: key_ref.to_owned(),
             original: Some(e),

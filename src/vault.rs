@@ -109,15 +109,15 @@ impl Client {
         try!(res.read_to_string(&mut body));
         Ok(try!(json::decode(&body)))
     }
-}
 
-impl Backend for Client {
-    fn get(&mut self, credential: &str) -> Result<String, BoxedError> {
-        match self.secretfile.var(credential) {
+    fn get_loc(&mut self, searched_for: &str, loc: Option<Location>) ->
+        Result<String, BoxedError>
+    {
+        match loc {
             None => {
-                Err(err!("No Secretfile entry for {}", credential))
+                Err(err!("No Secretfile entry for {}", searched_for))
             }
-            Some(&Location::PathWithKey(ref path, ref key)) => {
+            Some(Location::PathWithKey(ref path, ref key)) => {
                 // If we haven't cached this secret, do so.  This is
                 // necessary to correctly support dynamic credentials,
                 // which may have more than one related key in a single
@@ -137,11 +137,23 @@ impl Backend for Client {
                     err!("No key {} in secret {}", key, path)
                 }).map(|v| v.clone())
             }
-            Some(&Location::Path(ref path)) => {
+            Some(Location::Path(ref path)) => {
                 Err(err!("The path \"{}\" is missing a \":key\" component",
                          path))
             }
         }
+    }
+}
+
+impl Backend for Client {
+    fn var(&mut self, credential: &str) -> Result<String, BoxedError> {
+        let loc = self.secretfile.var(credential).cloned();
+        self.get_loc(credential, loc)
+    }
+
+    fn file(&mut self, path: &str) -> Result<String, BoxedError> {
+        let loc = self.secretfile.file(path).cloned();
+        self.get_loc(path, loc)
     }
 }
 
@@ -175,8 +187,8 @@ mod tests {
     }
 
     #[test]
-    fn test_get() {
+    fn test_var() {
         let mut client = test_client();
-        assert_eq!("bar", client.get("FOO").unwrap());
+        assert_eq!("bar", client.var("FOO").unwrap());
     }
 }

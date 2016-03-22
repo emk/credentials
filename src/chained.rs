@@ -33,11 +33,23 @@ impl Client {
 }
 
 impl Backend for Client {
-    fn get(&mut self, credential: &str) -> Result<String, BoxedError> {
+    fn var(&mut self, credential: &str) -> Result<String, BoxedError> {
         // We want to return either the first success or the last error.
         let mut result = Err(err("No backend available"));
         for backend in self.backends.iter_mut() {
-            result = backend.get(credential);
+            result = backend.var(credential);
+            if result.is_ok() {
+                break;
+            }
+        }
+        result
+    }
+
+    fn file(&mut self, path: &str) -> Result<String, BoxedError> {
+        // We want to return either the first success or the last error.
+        let mut result = Err(err("No backend available"));
+        for backend in self.backends.iter_mut() {
+            result = backend.file(path);
             if result.is_ok() {
                 break;
             }
@@ -62,9 +74,17 @@ mod tests {
     }
 
     impl Backend for DummyClient {
-        fn get(&mut self, credential: &str) -> Result<String, BoxedError> {
+        fn var(&mut self, credential: &str) -> Result<String, BoxedError> {
             if credential == "DUMMY" {
                 Ok("dummy".to_owned())
+            } else {
+                Err(err("Credential not supported"))
+            }
+        }
+
+        fn file(&mut self, path: &str) -> Result<String, BoxedError> {
+            if path == "dummy.txt" {
+                Ok("dummy2".to_owned())
             } else {
                 Err(err("Credential not supported"))
             }
@@ -72,13 +92,17 @@ mod tests {
     }
 
     #[test]
-    fn test_get() {
+    fn test_chaining() {
         let mut client = Client::new();
         client.add(envvar::Client::new_default().unwrap());
         client.add(DummyClient::new_default().unwrap());
+
         env::set_var("FOO_USERNAME", "user");
-        assert_eq!("user", client.get("FOO_USERNAME").unwrap());
-        assert_eq!("dummy", client.get("DUMMY").unwrap());
-        assert!(client.get("NOSUCHVAR").is_err());
+        assert_eq!("user", client.var("FOO_USERNAME").unwrap());
+        assert_eq!("dummy", client.var("DUMMY").unwrap());
+        assert!(client.var("NOSUCHVAR").is_err());
+
+        assert_eq!("dummy2", client.file("dummy.txt").unwrap());
+        assert!(client.file("nosuchfile.txt").is_err());
     }
 }

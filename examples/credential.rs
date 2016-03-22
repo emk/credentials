@@ -15,7 +15,7 @@ fn main() {
 
     // Print our each credential specified on the command line.
     for secret in env::args().skip(1) {
-        match credentials::get(&secret) {
+        match credentials::var(&secret) {
             Ok(ref value) => println!("{}={}", &secret, value),
             Err(err) => {
                 writeln!(&mut io::stderr(), "Error: {}", err).unwrap();

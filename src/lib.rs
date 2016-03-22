@@ -29,6 +29,11 @@ use std::error::{self, Error};
 use std::fmt;
 use std::sync::{Mutex, MutexGuard};
 
+// Be very careful not to export any more of the Secretfile API than
+// strictly necessary, because we don't want to stablize too much at this
+// point.
+pub use secretfile::Secretfile;
+
 #[macro_use]
 mod backend;
 mod chained;

@@ -13,6 +13,9 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 
+/// The location of a secret in a given backend.  This is exported to the
+/// rest of this crate, but isn't part of the public `Secretfile` API,
+/// because we might add more types of locations in the future.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Location {
     // Used for systems which identify credentials with simple string keys.
@@ -144,14 +147,25 @@ impl Secretfile {
         path.push("Secretfile");
         Secretfile::from_path(path)
     }
+}
 
+/// Internal methods for looking up `Location`s in `Secretfile`.  These are
+/// hidden in a separate trait so that we can export them _within_ this
+/// crate, but not expose them to other crates.
+pub trait SecretfileLookup {
     /// Fetch the backend path for a variable listed in a `Secretfile`.
-    pub fn var(&self, name: &str) -> Option<&Location> {
+    fn var(&self, name: &str) -> Option<&Location>;
+
+    /// Fetch the backend path for a file listed in a `Secretfile`.
+    fn file(&self, name: &str) -> Option<&Location>;
+}
+
+impl SecretfileLookup for Secretfile {
+    fn var(&self, name: &str) -> Option<&Location> {
         self.vars.get(name)
     }
 
-    /// Fetch the backend path for a file listed in a `Secretfile`.
-    pub fn file(&self, name: &str) -> Option<&Location> {
+    fn file(&self, name: &str) -> Option<&Location> {
         self.files.get(name)
     }
 }

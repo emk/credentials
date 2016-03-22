@@ -4,7 +4,7 @@ use backend::{Backend, BoxedError, err};
 use hyper;
 use hyper::header::Connection;
 use rustc_serialize::json;
-use secretfile::{Location, Secretfile};
+use secretfile::{Location, Secretfile, SecretfileLookup};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;

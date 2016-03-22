@@ -27,6 +27,7 @@ use std::convert::AsRef;
 use std::ops::{Deref, DerefMut};
 use std::error::{self, Error};
 use std::fmt;
+use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
 // Be very careful not to export any more of the Secretfile API than
@@ -94,16 +95,63 @@ fn var_inner(key: &str) -> Result<String, BoxedError> {
     }
 }
 
-/// Fetch the value of a credential.
-pub fn var<K: AsRef<str>>(key: K) -> Result<String, CredentialError> {
-    let key_ref = key.as_ref();
-    trace!("getting secure credential {}", key_ref);
-    var_inner(key.as_ref()).map_err(|e| {
+/// Helper function for `file`, below.
+fn file_inner(key: &str) -> Result<String, BoxedError> {
+    let mut backend_result: MutexGuard<_> = BACKEND.lock().unwrap();
+    match backend_result.deref_mut() {
+        &mut Ok(ref mut backend) => backend.file(key),
+        &mut Err(ref e) => Err(err!("Could not initialize: {}", e)),
+    }
+}
+
+/// Fetch the value of an environment-variable-style credential.
+pub fn var<S: AsRef<str>>(name: S) -> Result<String, CredentialError> {
+    let name_ref = name.as_ref();
+    trace!("getting secure credential {}", name_ref);
+    var_inner(name.as_ref()).map_err(|e| {
         let err = CredentialError {
-            credential: key_ref.to_owned(),
+            credential: name_ref.to_owned(),
             original: Some(e),
         };
         warn!("{}", err);
         err
     })
+}
+
+/// Fetch the value of an file-style credential.
+pub fn file<S: AsRef<Path>>(path: S) -> Result<String, CredentialError> {
+    let path_ref = path.as_ref();
+    let path_str = try!(path_ref.to_str().ok_or_else(|| {
+        CredentialError {
+            credential: "(invalid path)".to_owned(),
+            original: Some(err!("Path is not valid Unicode")),
+        }
+    }));
+    trace!("getting secure credential {}", path_str);
+    file_inner(path_str).map_err(|e| {
+        let err = CredentialError {
+            credential: path_str.to_owned(),
+            original: Some(e),
+        };
+        warn!("{}", err);
+        err
+    })
+}
+
+#[cfg(test)]
+mod test {
+    use std::fs;
+    use std::io::Read;
+    use super::file;
+
+    #[test]
+    fn test_file() {
+        // Some arbitrary file contents.
+        let mut f = fs::File::open("Cargo.toml").unwrap();
+        let mut expected = String::new();
+        f.read_to_string(&mut expected).unwrap();
+
+        assert_eq!(expected, file("Cargo.toml").unwrap());
+        assert!(file("nosuchfile.txt").is_err());
+    }
 }

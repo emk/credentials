@@ -99,12 +99,19 @@ impl Client {
     fn get_secret(&self, path: &str) -> Result<Secret, BoxedError> {
         let url = try!(self.addr.join(&format!("v1/{}", path)));
 
-        let req = self.client.get(url)
+        let req = self.client.get(url.clone())
             // Leaving the connection open will cause errors on reconnect
             // after inactivity.
             .header(Connection::close())
             .header(XVaultToken(self.token.clone()));
         let mut res = try!(req.send());
+
+        // Generate informative errors for HTTP failures, because these can
+        // be caused by everything from bad URLs to overly restrictive
+        // vault policies.
+        if !res.status.is_success() {
+            return Err(err!("GET {} returned {}", &url, res.status));
+        }
 
         let mut body = String::new();
         try!(res.read_to_string(&mut body));

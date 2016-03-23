@@ -1,7 +1,8 @@
 //! Backend which tries multiple other backends, in sequence.
 
-use backend::{Backend, BoxedError, err};
+use backend::Backend;
 use envvar;
+use errors::{BoxedError, err};
 use vault;
 
 /// Fetches credentials from various other backends, based on which ones
@@ -61,8 +62,9 @@ impl Backend for Client {
 #[cfg(test)]
 mod tests {
     use super::Client;
-    use backend::{Backend, BoxedError, err};
+    use backend::Backend;
     use envvar;
+    use errors::{BoxedError, err};
     use std::env;
 
     struct DummyClient;

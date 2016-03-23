@@ -1,6 +1,7 @@
 //! A very basic client for Hashicorp's Vault
 
-use backend::{Backend, BoxedError, err};
+use backend::Backend;
+use errors::{BoxedError, err};
 use hyper;
 use hyper::header::Connection;
 use rustc_serialize::json;

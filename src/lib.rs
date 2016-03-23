@@ -22,11 +22,10 @@ extern crate rustc_serialize;
 #[cfg(test)] #[macro_use]
 extern crate yup_hyper_mock as hyper_mock;
 
-use backend::{Backend, BoxedError, err};
+use backend::Backend;
+use errors::{BoxedError, CredentialErrorNew, err};
 use std::convert::AsRef;
-use std::ops::{Deref, DerefMut};
-use std::error::{self, Error};
-use std::fmt;
+use std::ops::DerefMut;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
@@ -34,8 +33,11 @@ use std::sync::{Mutex, MutexGuard};
 // strictly necessary, because we don't want to stablize too much at this
 // point.
 pub use secretfile::Secretfile;
+pub use errors::{CredentialError, SecretfileError};
 
 #[macro_use]
+mod errors;
+
 mod backend;
 mod chained;
 mod envvar;
@@ -48,34 +50,6 @@ lazy_static! {
     // per-thread client API for performance, but this will do for now.
     static ref BACKEND: Mutex<Result<chained::Client, BoxedError>> =
         Mutex::new(chained::Client::new_default());
-}
-
-/// An error occurred accessing credentials.
-#[derive(Debug)]
-pub struct CredentialError {
-    credential: String,
-    original: Option<backend::BoxedError>,
-}
-
-impl error::Error for CredentialError {
-    fn description(&self) -> &str { "can't access secure credential" }
-    fn cause(&self) -> Option<&error::Error> {
-        match self.original {
-            None => None,
-            Some(ref bx) => Some(bx.deref() as &std::error::Error),
-        }
-    }
-}
-
-impl fmt::Display for CredentialError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.original.is_none() {
-            write!(f, "{} {}", self.description(), self.credential)
-        } else {
-            write!(f, "{} {}: {}", self.description(), self.credential,
-                   self.cause().unwrap())
-        }
-    }
 }
 
 /// Helper function for `var`, below.
@@ -109,30 +83,22 @@ pub fn var<S: AsRef<str>>(name: S) -> Result<String, CredentialError> {
     let name_ref = name.as_ref();
     trace!("getting secure credential {}", name_ref);
     var_inner(name.as_ref()).map_err(|e| {
-        let err = CredentialError {
-            credential: name_ref.to_owned(),
-            original: Some(e),
-        };
+        let err = CredentialError::new(name_ref.to_owned(), e);
         warn!("{}", err);
         err
     })
 }
 
-/// Fetch the value of an file-style credential.
+/// Fetch the value of a file-style credential.
 pub fn file<S: AsRef<Path>>(path: S) -> Result<String, CredentialError> {
     let path_ref = path.as_ref();
     let path_str = try!(path_ref.to_str().ok_or_else(|| {
-        CredentialError {
-            credential: "(invalid path)".to_owned(),
-            original: Some(err!("Path is not valid Unicode")),
-        }
+        CredentialError::new("(invalid path)".to_owned(),
+                             err!("Path is not valid Unicode"))
     }));
     trace!("getting secure credential {}", path_str);
     file_inner(path_str).map_err(|e| {
-        let err = CredentialError {
-            credential: path_str.to_owned(),
-            original: Some(e),
-        };
+        let err = CredentialError::new(path_str.to_owned(), e);
         warn!("{}", err);
         err
     })

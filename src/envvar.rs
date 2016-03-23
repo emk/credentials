@@ -1,6 +1,7 @@
 //! A backend which reads from environment variables.
 
-use backend::{Backend, BoxedError};
+use backend::Backend;
+use errors::BoxedError;
 use std::env;
 use std::fs;
 use std::io::Read;

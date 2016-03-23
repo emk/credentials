@@ -5,7 +5,7 @@
 //! keys: from `MY_SECRET_PASSWORD` to the path `secret/my_secret` and the
 //! key `"password"`.
 
-use backend::{BoxedError, err};
+use errors::{BoxedError, err, SecretfileError, SecretfileErrorNew};
 use regex::{Captures, Regex};
 use std::collections::{btree_map, BTreeMap};
 use std::env;
@@ -14,34 +14,6 @@ use std::iter::Iterator;
 use std::io::{self, BufRead};
 use std::path::Path;
 
-/// The location of a secret in a given backend.  This is exported to the
-/// rest of this crate, but isn't part of the public `Secretfile` API,
-/// because we might add more types of locations in the future.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Location {
-    // Used for systems which identify credentials with simple string keys.
-    Path(String),
-    /// Used for systems like Vault where a path _and_ a hash key are
-    /// needed to identify a specific credential.
-    PathWithKey(String, String),
-}
-
-impl Location {
-    /// Create a new `Location` from a regex `Captures` containing the
-    /// named match `path` and optionally `key`.
-    fn from_caps<'a>(caps: &Captures<'a>) -> Result<Location, BoxedError> {
-        match (caps.name("path"), caps.name("key")) {
-            (Some(path), None) =>
-                Ok(Location::Path(try!(interpolate_env(path)))),
-            (Some(path), Some(key)) =>
-                Ok(Location::PathWithKey(try!(interpolate_env(path)),
-                                         key.to_owned())),
-            (_, _) =>
-                Err(err!("Could not parse location in Secretfile: {}",
-                         caps.at(0).unwrap())),
-        }
-    }
-}
 
 /// Interpolate environment variables into a string.
 fn interpolate_env(text: &str) -> Result<String, BoxedError> {
@@ -68,10 +40,41 @@ fn interpolate_env(text: &str) -> Result<String, BoxedError> {
     match undefined_env_var {
         None => Ok(result),
         Some(var) =>
-            Err(err!("Secretfile: Environment variable {} is not defined", var))
+            Err(err!("Environment variable {} is not defined", var))
     }
 }
 
+/// The location of a secret in a given backend.  This is exported to the
+/// rest of this crate, but isn't part of the public `Secretfile` API,
+/// because we might add more types of locations in the future.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Location {
+    // Used for systems which identify credentials with simple string keys.
+    Path(String),
+    /// Used for systems like Vault where a path _and_ a hash key are
+    /// needed to identify a specific credential.
+    PathWithKey(String, String),
+}
+
+impl Location {
+    /// Create a new `Location` from a regex `Captures` containing the
+    /// named match `path` and optionally `key`.
+    fn from_caps<'a>(caps: &Captures<'a>) -> Result<Location, BoxedError> {
+        match (caps.name("path"), caps.name("key")) {
+            (Some(path), None) =>
+                Ok(Location::Path(try!(interpolate_env(path)))),
+            (Some(path), Some(key)) =>
+                Ok(Location::PathWithKey(try!(interpolate_env(path)),
+                                         key.to_owned())),
+            (_, _) =>
+                Err(err!("Could not parse location: {}",
+                         caps.at(0).unwrap())),
+        }
+    }
+}
+
+/// A basic interface for loading a `Secretfile` and listing the various
+/// variables and files contained inside.
 #[derive(Debug, Clone)]
 pub struct Secretfile {
     varmap: BTreeMap<String, Location>,
@@ -79,8 +82,8 @@ pub struct Secretfile {
 }
 
 impl Secretfile {
-    /// Read in from an `io::Read` object.
-    pub fn read(read: &mut io::Read) -> Result<Secretfile, BoxedError> {
+    fn read_internal(read: &mut io::Read) -> Result<Secretfile, BoxedError>
+    {
         // Only compile this Regex once.
         lazy_static! {
             // Match an individual line in a Secretfile.
@@ -130,20 +133,32 @@ impl Secretfile {
         Ok(sf)
     }
 
+    /// Read in from an `io::Read` object.
+    pub fn read(read: &mut io::Read) -> Result<Secretfile, SecretfileError>
+    {
+        // Wrap our errors in a high-level API.
+        Secretfile::read_internal(read).map_err(|err| {
+            SecretfileError::new(err)
+        })
+    }
+
     /// Read a `Secretfile` from a string.  Currently only used for testing.
-    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile, BoxedError> {
+    pub fn from_str<S: AsRef<str>>(s: S) ->
+        Result<Secretfile, SecretfileError>
+    {
         let mut cursor = io::Cursor::new(s.as_ref().as_bytes());
         Secretfile::read(&mut cursor)
     }
 
     /// Load the `Secretfile` at the specified path.
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile, BoxedError>
+    pub fn from_path<P: AsRef<Path>>(path: P) ->
+        Result<Secretfile, SecretfileError>
     {
         Secretfile::read(&mut try!(File::open(path)))
     }
 
     /// Load the default `Secretfile`.
-    pub fn default() -> Result<Secretfile, BoxedError> {
+    pub fn default() -> Result<Secretfile, SecretfileError> {
         let mut path = try!(env::current_dir());
         path.push("Secretfile");
         Secretfile::from_path(path)

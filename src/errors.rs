@@ -34,7 +34,7 @@ macro_rules! err {
 #[derive(Debug)]
 pub struct CredentialError {
     credential: String,
-    original: Option<BoxedError>,
+    original: BoxedError,
 }
 
 /// These methods are public inside the crate, but not visible outside.
@@ -48,7 +48,7 @@ impl CredentialErrorNew for CredentialError {
     fn new(credential: String, err: BoxedError) -> CredentialError {
         CredentialError {
             credential: credential,
-            original: Some(err),
+            original: err,
         }
     }
 }
@@ -56,21 +56,14 @@ impl CredentialErrorNew for CredentialError {
 impl error::Error for CredentialError {
     fn description(&self) -> &str { "can't access secure credential" }
     fn cause(&self) -> Option<&error::Error> {
-        match self.original {
-            None => None,
-            Some(ref bx) => Some(bx.deref() as &error::Error),
-        }
+        Some(self.original.deref() as &error::Error)
     }
 }
 
 impl fmt::Display for CredentialError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.original.is_none() {
-            write!(f, "{} {}", self.description(), self.credential)
-        } else {
-            write!(f, "{} {}: {}", self.description(), self.credential,
-                   self.cause().unwrap())
-        }
+        write!(f, "{} {}: {}", self.description(), self.credential,
+               self.cause().unwrap())
     }
 }
 
@@ -81,7 +74,7 @@ impl fmt::Display for CredentialError {
 /// Represents an error which occurred parsing a `Secretfile`.
 #[derive(Debug)]
 pub struct SecretfileError {
-    original: Option<BoxedError>,
+    original: BoxedError,
 }
 
 /// These methods are public inside the crate, but not visible outside.
@@ -92,38 +85,31 @@ pub trait SecretfileErrorNew {
 
 impl SecretfileErrorNew for SecretfileError {
     fn new(err: BoxedError) -> SecretfileError {
-        SecretfileError { original: Some(err) }
+        SecretfileError { original: err }
     }
 }
 
 impl error::Error for SecretfileError {
     fn description(&self) -> &str { "error parsing Secretfile" }
     fn cause(&self) -> Option<&error::Error> {
-        match self.original {
-            None => None,
-            Some(ref bx) => Some(bx.deref() as &error::Error),
-        }
+        Some(self.original.deref() as &error::Error)
     }
 }
 
 impl fmt::Display for SecretfileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.original.is_none() {
-            write!(f, "{}", self.description())
-        } else {
-            write!(f, "{}: {}", self.description(), self.cause().unwrap())
-        }
+        write!(f, "{}: {}", self.description(), self.cause().unwrap())
     }
 }
 
 impl From<BoxedError> for SecretfileError {
     fn from(err: BoxedError) -> SecretfileError {
-        SecretfileError { original: Some(err) }
+        SecretfileError { original: err }
     }
 }
 
 impl From<io::Error> for SecretfileError {
     fn from(err: io::Error) -> SecretfileError {
-        SecretfileError { original: Some(Box::new(err)) }
+        SecretfileError { original: Box::new(err) }
     }
 }

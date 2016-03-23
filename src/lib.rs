@@ -32,7 +32,7 @@ use std::sync::{Mutex, MutexGuard};
 // Be very careful not to export any more of the Secretfile API than
 // strictly necessary, because we don't want to stablize too much at this
 // point.
-pub use secretfile::Secretfile;
+pub use secretfile::{Secretfile, SecretfileKeys};
 pub use errors::{CredentialError, SecretfileError};
 
 #[macro_use]

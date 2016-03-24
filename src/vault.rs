@@ -59,9 +59,6 @@ pub struct Client {
     addr: hyper::Url,
     /// The token which we'll use to access Vault.
     token: String,
-    /// Mapping from environment-variable-style names to locations in
-    /// Vault.
-    secretfile: Secretfile,
     /// Local cache of secrets.
     secrets: BTreeMap<String, Secret>,
 }
@@ -78,12 +75,10 @@ impl Client {
     pub fn new_default() -> Result<Client, Error> {
         Client::new(hyper::Client::new(),
                     &try!(default_addr()),
-                    try!(default_token()),
-                    try!(Secretfile::default()))
+                    try!(default_token()))
     }
 
-    fn new<U,S>(client: hyper::Client, addr: U, token: S,
-                secretfile: Secretfile) ->
+    fn new<U,S>(client: hyper::Client, addr: U, token: S) ->
         Result<Client, Error>
         where U: hyper::client::IntoUrl, S: Into<String>
     {
@@ -93,7 +88,6 @@ impl Client {
                 Box::new(err) as BoxedError
             })),
             token: token.into(),
-            secretfile: secretfile,
             secrets: BTreeMap::new(),
         })
     }
@@ -156,13 +150,17 @@ impl Client {
 }
 
 impl Backend for Client {
-    fn var(&mut self, credential: &str) -> Result<String, BoxedError> {
-        let loc = self.secretfile.var(credential).cloned();
+    fn var(&mut self, secretfile: &Secretfile, credential: &str) ->
+        Result<String, BoxedError>
+    {
+        let loc = secretfile.var(credential).cloned();
         self.get_loc(credential, loc)
     }
 
-    fn file(&mut self, path: &str) -> Result<String, BoxedError> {
-        let loc = self.secretfile.file(path).cloned();
+    fn file(&mut self, secretfile: &Secretfile, path: &str) ->
+        Result<String, BoxedError>
+    {
+        let loc = secretfile.file(path).cloned();
         self.get_loc(path, loc)
     }
 }
@@ -185,8 +183,7 @@ mod tests {
 
     fn test_client() -> Client {
         let h = hyper::Client::with_connector(MockVault::default());
-        let secretfile = Secretfile::from_str("FOO secret/foo:value").unwrap();
-        Client::new(h, "http://127.0.0.1", "123", secretfile).unwrap()
+        Client::new(h, "http://127.0.0.1", "123").unwrap()
     }
 
     #[test]
@@ -198,7 +195,8 @@ mod tests {
 
     #[test]
     fn test_var() {
+        let sf = Secretfile::from_str("FOO secret/foo:value").unwrap();
         let mut client = test_client();
-        assert_eq!("bar", client.var("FOO").unwrap());
+        assert_eq!("bar", client.var(&sf, "FOO").unwrap());
     }
 }

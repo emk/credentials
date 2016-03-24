@@ -72,7 +72,7 @@ impl Client {
     pub fn var<S: AsRef<str>>(&mut self, name: S) -> Result<String, Error> {
         let name_ref = name.as_ref();
         trace!("getting secure credential {}", name_ref);
-        self.backend.var(name_ref).map_err(|e| {
+        self.backend.var(&self.secretfile, name_ref).map_err(|e| {
             let err = Error::credential(name_ref, e);
             warn!("{}", err);
             err
@@ -86,7 +86,7 @@ impl Client {
             Error::credential("(invalid path)", err!("Path is not valid Unicode"))
         }));
         trace!("getting secure credential {}", path_str);
-        self.backend.file(path_str).map_err(|e| {
+        self.backend.file(&self.secretfile, path_str).map_err(|e| {
             let err = Error::credential(path_str, e);
             warn!("{}", err);
             err

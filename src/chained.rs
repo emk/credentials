@@ -3,6 +3,7 @@
 use backend::Backend;
 use envvar;
 use errors::{BoxedError, err, Error};
+use secretfile::Secretfile;
 use vault;
 
 /// Fetches credentials from various other backends, based on which ones
@@ -34,11 +35,13 @@ impl Client {
 }
 
 impl Backend for Client {
-    fn var(&mut self, credential: &str) -> Result<String, BoxedError> {
+    fn var(&mut self, secretfile: &Secretfile, credential: &str) ->
+        Result<String, BoxedError>
+    {
         // We want to return either the first success or the last error.
         let mut result = Err(err("No backend available"));
         for backend in self.backends.iter_mut() {
-            result = backend.var(credential);
+            result = backend.var(secretfile, credential);
             if result.is_ok() {
                 break;
             }
@@ -46,11 +49,13 @@ impl Backend for Client {
         result
     }
 
-    fn file(&mut self, path: &str) -> Result<String, BoxedError> {
+    fn file(&mut self, secretfile: &Secretfile, path: &str) ->
+        Result<String, BoxedError>
+    {
         // We want to return either the first success or the last error.
         let mut result = Err(err("No backend available"));
         for backend in self.backends.iter_mut() {
-            result = backend.file(path);
+            result = backend.file(secretfile, path);
             if result.is_ok() {
                 break;
             }
@@ -65,6 +70,7 @@ mod tests {
     use backend::Backend;
     use envvar;
     use errors::{BoxedError, err, Error};
+    use secretfile::Secretfile;
     use std::env;
 
     struct DummyClient;
@@ -76,7 +82,9 @@ mod tests {
     }
 
     impl Backend for DummyClient {
-        fn var(&mut self, credential: &str) -> Result<String, BoxedError> {
+        fn var(&mut self, _secretfile: &Secretfile, credential: &str) ->
+            Result<String, BoxedError>
+        {
             if credential == "DUMMY" {
                 Ok("dummy".to_owned())
             } else {
@@ -84,7 +92,9 @@ mod tests {
             }
         }
 
-        fn file(&mut self, path: &str) -> Result<String, BoxedError> {
+        fn file(&mut self, _secretfile: &Secretfile, path: &str) ->
+            Result<String, BoxedError>
+        {
             if path == "dummy.txt" {
                 Ok("dummy2".to_owned())
             } else {
@@ -95,16 +105,17 @@ mod tests {
 
     #[test]
     fn test_chaining() {
+        let sf = Secretfile::from_str("").unwrap();
         let mut client = Client::new();
         client.add(envvar::Client::new_default().unwrap());
         client.add(DummyClient::new_default().unwrap());
 
         env::set_var("FOO_USERNAME", "user");
-        assert_eq!("user", client.var("FOO_USERNAME").unwrap());
-        assert_eq!("dummy", client.var("DUMMY").unwrap());
-        assert!(client.var("NOSUCHVAR").is_err());
+        assert_eq!("user", client.var(&sf, "FOO_USERNAME").unwrap());
+        assert_eq!("dummy", client.var(&sf, "DUMMY").unwrap());
+        assert!(client.var(&sf, "NOSUCHVAR").is_err());
 
-        assert_eq!("dummy2", client.file("dummy.txt").unwrap());
-        assert!(client.file("nosuchfile.txt").is_err());
+        assert_eq!("dummy2", client.file(&sf, "dummy.txt").unwrap());
+        assert!(client.file(&sf, "nosuchfile.txt").is_err());
     }
 }

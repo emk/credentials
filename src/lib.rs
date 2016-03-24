@@ -50,7 +50,7 @@ mod vault;
 /// `credentials::file` methods instead, but you may need to use this to
 /// customize behavior.
 pub struct Client {
-    secretfile: Secretfile,
+    sf: Secretfile,
     backend: chained::Client,
 }
 
@@ -63,16 +63,21 @@ impl Client {
     /// Create a new client using the specified `Secretfile`.
     fn with_secretfile(secretfile: Secretfile) -> Result<Client, Error> {
         Ok(Client {
-            secretfile: secretfile,
+            sf: secretfile,
             backend: try!(chained::Client::new_default()),
         })
+    }
+
+    /// Provide access to a copy of the Secretfile we're using.
+    pub fn secretfile(&self) -> &Secretfile {
+        &self.sf
     }
 
     /// Fetch the value of an environment-variable-style credential.
     pub fn var<S: AsRef<str>>(&mut self, name: S) -> Result<String, Error> {
         let name_ref = name.as_ref();
         trace!("getting secure credential {}", name_ref);
-        self.backend.var(&self.secretfile, name_ref).map_err(|e| {
+        self.backend.var(&self.sf, name_ref).map_err(|e| {
             let err = Error::credential(name_ref, e);
             warn!("{}", err);
             err
@@ -86,7 +91,7 @@ impl Client {
             Error::credential("(invalid path)", err!("Path is not valid Unicode"))
         }));
         trace!("getting secure credential {}", path_str);
-        self.backend.file(&self.secretfile, path_str).map_err(|e| {
+        self.backend.file(&self.sf, path_str).map_err(|e| {
             let err = Error::credential(path_str, e);
             warn!("{}", err);
             err

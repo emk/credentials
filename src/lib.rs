@@ -23,7 +23,8 @@ extern crate rustc_serialize;
 extern crate yup_hyper_mock as hyper_mock;
 
 use backend::Backend;
-use errors::{BoxedError, CredentialErrorNew, err};
+use errors::{ErrorNew, err};
+use std::cell::RefCell;
 use std::convert::AsRef;
 use std::ops::DerefMut;
 use std::path::Path;
@@ -33,7 +34,7 @@ use std::sync::{Mutex, MutexGuard};
 // strictly necessary, because we don't want to stablize too much at this
 // point.
 pub use secretfile::{Secretfile, SecretfileKeys};
-pub use errors::{CredentialError, SecretfileError};
+pub use errors::Error;
 
 #[macro_use]
 mod errors;
@@ -44,64 +45,116 @@ mod envvar;
 mod secretfile;
 mod vault;
 
-lazy_static! {
-    // Our shared global client, initialized by `lazy_static!` and
-    // protected by a Mutex.  There's no reason why we couldn't create a
-    // per-thread client API for performance, but this will do for now.
-    static ref BACKEND: Mutex<Result<chained::Client, BoxedError>> =
-        Mutex::new(chained::Client::new_default());
+/// A client which fetches secrets.  Under normal circumstances, it's
+/// usually easier to use the static `credentials::var` and
+/// `credentials::file` methods instead, but you may need to use this to
+/// customize behavior.
+pub struct Client {
+    secretfile: Secretfile,
+    backend: chained::Client,
 }
 
-/// Helper function for `var`, below.
-fn var_inner(key: &str) -> Result<String, BoxedError> {
+impl Client {
+    /// Create a new client using the default `Secretfile`.
+    fn new() -> Result<Client, Error> {
+        Client::with_secretfile(try!(Secretfile::default()))
+    }
+
+    /// Create a new client using the specified `Secretfile`.
+    fn with_secretfile(secretfile: Secretfile) -> Result<Client, Error> {
+        Ok(Client {
+            secretfile: secretfile,
+            backend: try!(chained::Client::new_default()),
+        })
+    }
+
+    /// Fetch the value of an environment-variable-style credential.
+    pub fn var<S: AsRef<str>>(&mut self, name: S) -> Result<String, Error> {
+        let name_ref = name.as_ref();
+        trace!("getting secure credential {}", name_ref);
+        self.backend.var(name_ref).map_err(|e| {
+            let err = Error::credential(name_ref, e);
+            warn!("{}", err);
+            err
+        })
+    }
+
+    /// Fetch the value of a file-style credential.
+    pub fn file<S: AsRef<Path>>(&mut self, path: S) -> Result<String, Error> {
+        let path_ref = path.as_ref();
+        let path_str = try!(path_ref.to_str().ok_or_else(|| {
+            Error::credential("(invalid path)", err!("Path is not valid Unicode"))
+        }));
+        trace!("getting secure credential {}", path_str);
+        self.backend.file(path_str).map_err(|e| {
+            let err = Error::credential(path_str, e);
+            warn!("{}", err);
+            err
+        })
+    }
+}
+
+lazy_static! {
+    // Our shared global client, initialized by `lazy_static!` and
+    // protected by a Mutex.
+    //
+    // Rust deliberately makes it a nuisance to use mutable global
+    // variables.  In this case, the `Mutex` provides thread-safe locking,
+    // the `RefCell` makes this assignable, and the `Option` makes this
+    // optional.  This is a message from the language saying, "Really? A
+    // mutable global that might be null? Have you really thought about
+    // this?"  But the global default client is only for convenience, so
+    // we're OK with it, at least so far.
+    static ref CLIENT: Mutex<RefCell<Option<Client>>> =
+        Mutex::new(RefCell::new(None));
+}
+
+/// Set the default global `Client` to the value specified.  This is
+/// normally used to specify non-default configuration options, and it
+/// should ideally be run before spawning threads or fetching credentials.
+pub fn set_client(client: Client) {
     // This is a bit subtle: First we need to lock our Mutex, and then--if
     // our Mutex was poisoned by a panic in another thread--we want to
     // propagate the panic in this thread using `unwrap()`.  See
     // https://doc.rust-lang.org/std/sync/struct.Mutex.html for details.
-    let mut backend_result: MutexGuard<_> = BACKEND.lock().unwrap();
+    let client_cell: MutexGuard<_> = CLIENT.lock().unwrap();
 
-    // Deref our MutexGuard as a mutable reference, and then check to see
-    // if it was initialized correctly.  I had to tweak the `mut` bits for
-    // a few minutes to get this past the borrow checker.
-    match backend_result.deref_mut() {
-        &mut Ok(ref mut backend) => backend.var(key),
-        &mut Err(ref e) => Err(err!("Could not initialize: {}", e)),
-    }
+    // Set our global client.
+    *client_cell.borrow_mut() = Some(client);
 }
 
-/// Helper function for `file`, below.
-fn file_inner(key: &str) -> Result<String, BoxedError> {
-    let mut backend_result: MutexGuard<_> = BACKEND.lock().unwrap();
-    match backend_result.deref_mut() {
-        &mut Ok(ref mut backend) => backend.file(key),
-        &mut Err(ref e) => Err(err!("Could not initialize: {}", e)),
+/// Call `body` with the default global client, or return an error if we
+/// can't allocate a default global client.
+fn with_client<F>(body: F) -> Result<String, Error>
+    where F: FnOnce(&mut Client) -> Result<String, Error>
+{
+    let client_cell: MutexGuard<_> = CLIENT.lock().unwrap();
+
+    // Try to set up the client if we haven't already.
+    if client_cell.borrow().is_none() {
+        *client_cell.borrow_mut() = Some(try!(Client::new()));
     }
+
+    // Call the provided function.  I have to break out `result` separately
+    // for mysterious reasons related to the borrow checker and global
+    // mutable state.
+    let result = match client_cell.borrow_mut().deref_mut() {
+        &mut Some(ref mut client) => body(client),
+        // We theoretically handed this just above, and exited if we
+        // failed.
+        &mut None => panic!("Should have a client, but we don't")
+    };
+    result
 }
 
 /// Fetch the value of an environment-variable-style credential.
-pub fn var<S: AsRef<str>>(name: S) -> Result<String, CredentialError> {
-    let name_ref = name.as_ref();
-    trace!("getting secure credential {}", name_ref);
-    var_inner(name.as_ref()).map_err(|e| {
-        let err = CredentialError::new(name_ref.to_owned(), e);
-        warn!("{}", err);
-        err
-    })
+pub fn var<S: AsRef<str>>(name: S) -> Result<String, Error> {
+    with_client(|client| client.var(name))
 }
 
 /// Fetch the value of a file-style credential.
-pub fn file<S: AsRef<Path>>(path: S) -> Result<String, CredentialError> {
-    let path_ref = path.as_ref();
-    let path_str = try!(path_ref.to_str().ok_or_else(|| {
-        CredentialError::new("(invalid path)".to_owned(),
-                             err!("Path is not valid Unicode"))
-    }));
-    trace!("getting secure credential {}", path_str);
-    file_inner(path_str).map_err(|e| {
-        let err = CredentialError::new(path_str.to_owned(), e);
-        warn!("{}", err);
-        err
-    })
+pub fn file<S: AsRef<Path>>(path: S) -> Result<String, Error> {
+    with_client(|client| client.file(path))
 }
 
 #[cfg(test)]

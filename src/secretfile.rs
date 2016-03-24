@@ -5,7 +5,7 @@
 //! keys: from `MY_SECRET_PASSWORD` to the path `secret/my_secret` and the
 //! key `"password"`.
 
-use errors::{BoxedError, err, SecretfileError, SecretfileErrorNew};
+use errors::{BoxedError, err, Error, ErrorNew};
 use regex::{Captures, Regex};
 use std::collections::{btree_map, BTreeMap};
 use std::env;
@@ -134,32 +134,34 @@ impl Secretfile {
     }
 
     /// Read in from an `io::Read` object.
-    pub fn read(read: &mut io::Read) -> Result<Secretfile, SecretfileError>
+    pub fn read(read: &mut io::Read) -> Result<Secretfile, Error>
     {
         // Wrap our errors in a high-level API.
         Secretfile::read_internal(read).map_err(|err| {
-            SecretfileError::new(err)
+            Error::secretfile_parse(err)
         })
     }
 
     /// Read a `Secretfile` from a string.  Currently only used for testing.
-    pub fn from_str<S: AsRef<str>>(s: S) ->
-        Result<Secretfile, SecretfileError>
+    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile, Error>
     {
         let mut cursor = io::Cursor::new(s.as_ref().as_bytes());
         Secretfile::read(&mut cursor)
     }
 
     /// Load the `Secretfile` at the specified path.
-    pub fn from_path<P: AsRef<Path>>(path: P) ->
-        Result<Secretfile, SecretfileError>
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile, Error>
     {
-        Secretfile::read(&mut try!(File::open(path)))
+        Secretfile::read(&mut try!(File::open(path).map_err(|err| {
+            Error::secretfile_parse(err)
+        })))
     }
 
     /// Load the default `Secretfile`.
-    pub fn default() -> Result<Secretfile, SecretfileError> {
-        let mut path = try!(env::current_dir());
+    pub fn default() -> Result<Secretfile, Error> {
+        let mut path = try!(env::current_dir().map_err(|err| {
+            Error::secretfile_parse(err)
+        }));
         path.push("Secretfile");
         Secretfile::from_path(path)
     }

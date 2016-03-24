@@ -1,7 +1,7 @@
 //! A backend which reads from environment variables.
 
 use backend::Backend;
-use errors::BoxedError;
+use errors::{BoxedError, Error};
 use std::env;
 use std::fs;
 use std::io::Read;
@@ -11,7 +11,7 @@ pub struct Client;
 
 impl Client {
     /// Create a new environment variable client.
-    pub fn new_default() -> Result<Client, BoxedError> {
+    pub fn new_default() -> Result<Client, Error> {
         Ok(Client)
     }
 }

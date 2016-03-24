@@ -1,8 +1,9 @@
 //! Various error types used internally, and in our public APIs.
 
-use std::error::{self, Error};
+use std::error;
+// We just need this trait in scope for the methods, not its name.
+use std::error::Error as ErrorTrait;
 use std::fmt;
-use std::io;
 use std::ops::Deref;
 
 //=========================================================================
@@ -28,88 +29,88 @@ macro_rules! err {
 
 
 //=========================================================================
-// CredentialError
+// Error
+
+/// An error returned by this library.  This also carries error-specific
+/// information.  Not currently public, because we might want to add more
+/// error types in the future without breaking API compatibility.
+#[derive(Debug)]
+enum ErrorKind {
+    Credential(String),
+    SecretfileParse,
+    Other,
+}
 
 /// Represents an error which occurred accessing credentials.
 #[derive(Debug)]
-pub struct CredentialError {
-    credential: String,
+pub struct Error {
+    kind: ErrorKind,
     original: BoxedError,
 }
 
 /// These methods are public inside the crate, but not visible outside.
-pub trait CredentialErrorNew {
-    /// Wrap an existing error.
-    fn new(credential: String, err: BoxedError) -> CredentialError;
+pub trait ErrorNew {
+    /// Create a new credential-related error.
+    fn credential<S, E>(credential: S, err: E) -> Error
+        where S: Into<String>, E: Into<BoxedError>;
+
+    /// Create a new Secretfile-related error.
+    fn secretfile_parse<E>(err: E) -> Error
+        where E: Into<BoxedError>;
 }
 
-impl CredentialErrorNew for CredentialError {
-    /// Wrap an existing error.
-    fn new(credential: String, err: BoxedError) -> CredentialError {
-        CredentialError {
-            credential: credential,
-            original: err,
+impl ErrorNew for Error {
+    fn credential<S, E>(credential: S, err: E) -> Error
+        where S: Into<String>, E: Into<BoxedError>
+    {
+        Error {
+            kind: ErrorKind::Credential(credential.into()),
+            original: err.into(),
+        }
+    }
+
+    fn secretfile_parse<E>(err: E) -> Error
+        where E: Into<BoxedError>
+    {
+        Error {
+            kind: ErrorKind::SecretfileParse,
+            original: err.into(),
         }
     }
 }
 
-impl error::Error for CredentialError {
-    fn description(&self) -> &str { "can't access secure credential" }
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        match &self.kind {
+            &ErrorKind::Credential(_) => "can't access secure credential",
+            &ErrorKind::SecretfileParse => "error parsing Secretfile",
+            &ErrorKind::Other => self.original.description(),
+        }
+    }
+
     fn cause(&self) -> Option<&error::Error> {
         Some(self.original.deref() as &error::Error)
     }
 }
 
-impl fmt::Display for CredentialError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {}: {}", self.description(), self.credential,
-               self.cause().unwrap())
+        match &self.kind {
+            &ErrorKind::Other => self.original.fmt(f),
+            &ErrorKind::Credential(ref name) =>
+                write!(f, "{} {}: {}", self.description(), name,
+                       self.original),
+            _ =>
+                write!(f, "{}: {}", self.description(),  &self.original),
+        }
     }
 }
 
-
-//=========================================================================
-// SecretfileError
-
-/// Represents an error which occurred parsing a `Secretfile`.
-#[derive(Debug)]
-pub struct SecretfileError {
-    original: BoxedError,
-}
-
-/// These methods are public inside the crate, but not visible outside.
-pub trait SecretfileErrorNew {
-    /// Wrap an existing error.
-    fn new(err: BoxedError) -> SecretfileError;
-}
-
-impl SecretfileErrorNew for SecretfileError {
-    fn new(err: BoxedError) -> SecretfileError {
-        SecretfileError { original: err }
-    }
-}
-
-impl error::Error for SecretfileError {
-    fn description(&self) -> &str { "error parsing Secretfile" }
-    fn cause(&self) -> Option<&error::Error> {
-        Some(self.original.deref() as &error::Error)
-    }
-}
-
-impl fmt::Display for SecretfileError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {}", self.description(), self.cause().unwrap())
-    }
-}
-
-impl From<BoxedError> for SecretfileError {
-    fn from(err: BoxedError) -> SecretfileError {
-        SecretfileError { original: err }
-    }
-}
-
-impl From<io::Error> for SecretfileError {
-    fn from(err: io::Error) -> SecretfileError {
-        SecretfileError { original: Box::new(err) }
+impl From<BoxedError> for Error {
+    fn from(err: BoxedError) -> Error {
+        Error {
+            kind: ErrorKind::Other,
+            original: err,
+        }
     }
 }

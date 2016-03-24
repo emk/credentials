@@ -1,7 +1,7 @@
 //! A very basic client for Hashicorp's Vault
 
 use backend::Backend;
-use errors::{BoxedError, err};
+use errors::{BoxedError, err, Error};
 use hyper;
 use hyper::header::Connection;
 use rustc_serialize::json;
@@ -75,7 +75,7 @@ impl Client {
     /// Construct a new vault::Client, attempting to use the same
     /// environment variables and files used by the `vault` CLI tool and
     /// the Ruby `vault` gem.
-    pub fn new_default() -> Result<Client, BoxedError> {
+    pub fn new_default() -> Result<Client, Error> {
         Client::new(hyper::Client::new(),
                     &try!(default_addr()),
                     try!(default_token()),
@@ -84,12 +84,14 @@ impl Client {
 
     fn new<U,S>(client: hyper::Client, addr: U, token: S,
                 secretfile: Secretfile) ->
-        Result<Client, BoxedError>
+        Result<Client, Error>
         where U: hyper::client::IntoUrl, S: Into<String>
     {
         Ok(Client {
             client: client,
-            addr: try!(addr.into_url()),
+            addr: try!(addr.into_url().map_err(|err| {
+                Box::new(err) as BoxedError
+            })),
             token: token.into(),
             secretfile: secretfile,
             secrets: BTreeMap::new(),

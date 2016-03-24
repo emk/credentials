@@ -2,7 +2,7 @@
 
 use backend::Backend;
 use envvar;
-use errors::{BoxedError, err};
+use errors::{BoxedError, err, Error};
 use vault;
 
 /// Fetches credentials from various other backends, based on which ones
@@ -23,7 +23,7 @@ impl Client {
     }
 
     /// Set up the standard chain, based on what appears to be available.
-    pub fn new_default() -> Result<Client, BoxedError> {
+    pub fn new_default() -> Result<Client, Error> {
         let mut client = Client::new();
         client.add(try!(envvar::Client::new_default()));
         if vault::Client::is_enabled() {
@@ -64,13 +64,13 @@ mod tests {
     use super::Client;
     use backend::Backend;
     use envvar;
-    use errors::{BoxedError, err};
+    use errors::{BoxedError, err, Error};
     use std::env;
 
     struct DummyClient;
 
     impl DummyClient {
-        pub fn new_default() -> Result<DummyClient, BoxedError> {
+        pub fn new_default() -> Result<DummyClient, Error> {
             Ok(DummyClient)
         }
     }

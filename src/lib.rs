@@ -56,12 +56,12 @@ pub struct Client {
 
 impl Client {
     /// Create a new client using the default `Secretfile`.
-    fn new() -> Result<Client, Error> {
+    pub fn new() -> Result<Client, Error> {
         Client::with_secretfile(try!(Secretfile::default()))
     }
 
     /// Create a new client using the specified `Secretfile`.
-    fn with_secretfile(secretfile: Secretfile) -> Result<Client, Error> {
+    pub fn with_secretfile(secretfile: Secretfile) -> Result<Client, Error> {
         Ok(Client {
             sf: secretfile,
             backend: try!(chained::Client::new_default()),

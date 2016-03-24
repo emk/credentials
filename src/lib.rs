@@ -114,20 +114,6 @@ lazy_static! {
         Mutex::new(RefCell::new(None));
 }
 
-/// Set the default global `Client` to the value specified.  This is
-/// normally used to specify non-default configuration options, and it
-/// should ideally be run before spawning threads or fetching credentials.
-pub fn set_client(client: Client) {
-    // This is a bit subtle: First we need to lock our Mutex, and then--if
-    // our Mutex was poisoned by a panic in another thread--we want to
-    // propagate the panic in this thread using `unwrap()`.  See
-    // https://doc.rust-lang.org/std/sync/struct.Mutex.html for details.
-    let client_cell: MutexGuard<_> = CLIENT.lock().unwrap();
-
-    // Set our global client.
-    *client_cell.borrow_mut() = Some(client);
-}
-
 /// Call `body` with the default global client, or return an error if we
 /// can't allocate a default global client.
 fn with_client<F>(body: F) -> Result<String, Error>

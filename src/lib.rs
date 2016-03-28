@@ -26,6 +26,7 @@ use backend::Backend;
 use errors::{ErrorNew, err};
 use std::cell::RefCell;
 use std::convert::AsRef;
+use std::default::Default;
 use std::ops::DerefMut;
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
@@ -45,6 +46,32 @@ mod envvar;
 mod secretfile;
 mod vault;
 
+/// Options which can be passed to `Client::new`.
+pub struct Options {
+    sf: Option<Secretfile>,
+}
+
+impl Default for Options {
+    /// Create an `Options` object using the default values for each
+    /// option.
+    fn default() -> Options {
+        Options {
+            sf: None,
+        }
+    }
+}
+
+impl Options {
+    /// Specify a `Secretfile` for the `Client` to use.  This takes `self`
+    /// by value, so it consumes the `Options` structure it is called on,
+    /// and returns a new one.
+    pub fn secretfile(mut self, secretfile: Secretfile) -> Options {
+        self.sf = Some(secretfile);
+        self
+    }
+}
+
+
 /// A client which fetches secrets.  Under normal circumstances, it's
 /// usually easier to use the static `credentials::var` and
 /// `credentials::file` methods instead, but you may need to use this to
@@ -55,17 +82,26 @@ pub struct Client {
 }
 
 impl Client {
-    /// Create a new client using the default `Secretfile`.
-    pub fn new() -> Result<Client, Error> {
-        Client::with_secretfile(try!(Secretfile::default()))
-    }
-
-    /// Create a new client using the specified `Secretfile`.
-    pub fn with_secretfile(secretfile: Secretfile) -> Result<Client, Error> {
+    /// Create a new client using the specified options.
+    pub fn new(options: Options) -> Result<Client, Error> {
+        let secretfile = match options.sf {
+            Some(sf) => sf,
+            None => try!(Secretfile::default()),
+        };
         Ok(Client {
             sf: secretfile,
             backend: try!(chained::Client::default()),
         })
+    }
+
+    /// Create a new client using the default options.
+    pub fn default() -> Result<Client, Error> {
+        Client::new(Default::default())
+    }
+
+    /// Create a new client using the specified `Secretfile`.
+    pub fn with_secretfile(secretfile: Secretfile) -> Result<Client, Error> {
+        Client::new(Options::default().secretfile(secretfile))
     }
 
     /// Provide access to a copy of the Secretfile we're using.
@@ -123,7 +159,7 @@ fn with_client<F>(body: F) -> Result<String, Error>
 
     // Try to set up the client if we haven't already.
     if client_cell.borrow().is_none() {
-        *client_cell.borrow_mut() = Some(try!(Client::new()));
+        *client_cell.borrow_mut() = Some(try!(Client::default()));
     }
 
     // Call the provided function.  I have to break out `result` separately

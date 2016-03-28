@@ -94,6 +94,7 @@ impl Client {
 
     fn get_secret(&self, path: &str) -> Result<Secret, BoxedError> {
         let url = try!(self.addr.join(&format!("v1/{}", path)));
+        debug!("Getting secret {}", url);
 
         let req = self.client.get(url.clone())
             // Leaving the connection open will cause errors on reconnect

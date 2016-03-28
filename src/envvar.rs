@@ -21,7 +21,9 @@ impl Backend for Client {
     fn var(&mut self, _secretfile: &Secretfile, credential: &str) ->
         Result<String, BoxedError>
     {
-        Ok(try!(env::var(credential)))
+        let value = try!(env::var(credential));
+        debug!("Found credential {} in environment", credential);
+        Ok(value)
     }
 
     fn file(&mut self, _secretfile: &Secretfile, path: &str) ->
@@ -30,6 +32,7 @@ impl Backend for Client {
         let mut f = try!(fs::File::open(path));
         let mut contents = String::new();
         try!(f.read_to_string(&mut contents));
+        debug!("Found credential in local file {}", path);
         Ok(contents)
     }
 }

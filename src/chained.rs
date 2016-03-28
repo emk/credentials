@@ -28,6 +28,7 @@ impl Client {
         let mut client = Client::new();
         client.add(try!(envvar::Client::new_default()));
         if vault::Client::is_enabled() {
+            debug!("Enabling vault backend");
             client.add(try!(vault::Client::new_default()));
         }
         Ok(client)

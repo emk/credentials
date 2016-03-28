@@ -24,12 +24,12 @@ impl Client {
     }
 
     /// Set up the standard chain, based on what appears to be available.
-    pub fn new_default() -> Result<Client, Error> {
+    pub fn default() -> Result<Client, Error> {
         let mut client = Client::new();
-        client.add(try!(envvar::Client::new_default()));
+        client.add(try!(envvar::Client::default()));
         if vault::Client::is_enabled() {
             debug!("Enabling vault backend");
-            client.add(try!(vault::Client::new_default()));
+            client.add(try!(vault::Client::default()));
         }
         Ok(client)
     }
@@ -77,7 +77,7 @@ mod tests {
     struct DummyClient;
 
     impl DummyClient {
-        pub fn new_default() -> Result<DummyClient, Error> {
+        pub fn default() -> Result<DummyClient, Error> {
             Ok(DummyClient)
         }
     }
@@ -108,8 +108,8 @@ mod tests {
     fn test_chaining() {
         let sf = Secretfile::from_str("").unwrap();
         let mut client = Client::new();
-        client.add(envvar::Client::new_default().unwrap());
-        client.add(DummyClient::new_default().unwrap());
+        client.add(envvar::Client::default().unwrap());
+        client.add(DummyClient::default().unwrap());
 
         env::set_var("FOO_USERNAME", "user");
         assert_eq!("user", client.var(&sf, "FOO_USERNAME").unwrap());

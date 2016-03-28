@@ -64,7 +64,7 @@ impl Client {
     pub fn with_secretfile(secretfile: Secretfile) -> Result<Client, Error> {
         Ok(Client {
             sf: secretfile,
-            backend: try!(chained::Client::new_default()),
+            backend: try!(chained::Client::default()),
         })
     }
 

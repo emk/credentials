@@ -12,7 +12,7 @@ pub struct Client;
 
 impl Client {
     /// Create a new environment variable client.
-    pub fn new_default() -> Result<Client, Error> {
+    pub fn default() -> Result<Client, Error> {
         Ok(Client)
     }
 }
@@ -40,7 +40,7 @@ impl Backend for Client {
 #[test]
 fn test_var() {
     let sf = Secretfile::from_str("").unwrap();
-    let mut client = Client::new_default().unwrap();
+    let mut client = Client::default().unwrap();
     env::set_var("FOO_USERNAME", "user");
     assert_eq!("user", client.var(&sf, "FOO_USERNAME").unwrap());
     assert!(client.var(&sf, "NOSUCHVAR").is_err());
@@ -49,7 +49,7 @@ fn test_var() {
 #[test]
 fn test_file() {
     let sf = Secretfile::from_str("").unwrap();
-    let mut client = Client::new_default().unwrap();
+    let mut client = Client::default().unwrap();
 
     // Some arbitrary file contents.
     let mut f = fs::File::open("Cargo.toml").unwrap();

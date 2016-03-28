@@ -72,7 +72,7 @@ impl Client {
     /// Construct a new vault::Client, attempting to use the same
     /// environment variables and files used by the `vault` CLI tool and
     /// the Ruby `vault` gem.
-    pub fn new_default() -> Result<Client, Error> {
+    pub fn default() -> Result<Client, Error> {
         Client::new(hyper::Client::new(),
                     &try!(default_addr()),
                     try!(default_token()))

@@ -48,7 +48,8 @@ mod vault;
 
 /// Options which can be passed to `Client::new`.
 pub struct Options {
-    sf: Option<Secretfile>,
+    secretfile: Option<Secretfile>,
+    allow_override: bool,
 }
 
 impl Default for Options {
@@ -56,7 +57,8 @@ impl Default for Options {
     /// option.
     fn default() -> Options {
         Options {
-            sf: None,
+            secretfile: None,
+            allow_override: true,
         }
     }
 }
@@ -66,7 +68,12 @@ impl Options {
     /// by value, so it consumes the `Options` structure it is called on,
     /// and returns a new one.
     pub fn secretfile(mut self, secretfile: Secretfile) -> Options {
-        self.sf = Some(secretfile);
+        self.secretfile = Some(secretfile);
+        self
+    }
+
+    pub fn allow_override(mut self, allow_override: bool) -> Options {
+        self.allow_override = allow_override;
         self
     }
 }
@@ -77,20 +84,21 @@ impl Options {
 /// `credentials::file` methods instead, but you may need to use this to
 /// customize behavior.
 pub struct Client {
-    sf: Secretfile,
+    secretfile: Secretfile,
     backend: chained::Client,
 }
 
 impl Client {
     /// Create a new client using the specified options.
     pub fn new(options: Options) -> Result<Client, Error> {
-        let secretfile = match options.sf {
+        let secretfile = match options.secretfile {
             Some(sf) => sf,
             None => try!(Secretfile::default()),
         };
+        let over = options.allow_override;
         Ok(Client {
-            sf: secretfile,
-            backend: try!(chained::Client::default()),
+            secretfile: secretfile,
+            backend: try!(chained::Client::with_default_backends(over)),
         })
     }
 
@@ -106,14 +114,14 @@ impl Client {
 
     /// Provide access to a copy of the Secretfile we're using.
     pub fn secretfile(&self) -> &Secretfile {
-        &self.sf
+        &self.secretfile
     }
 
     /// Fetch the value of an environment-variable-style credential.
     pub fn var<S: AsRef<str>>(&mut self, name: S) -> Result<String, Error> {
         let name_ref = name.as_ref();
         trace!("getting secure credential {}", name_ref);
-        self.backend.var(&self.sf, name_ref).map_err(|e| {
+        self.backend.var(&self.secretfile, name_ref).map_err(|e| {
             let err = Error::credential(name_ref, e);
             warn!("{}", err);
             err
@@ -127,7 +135,7 @@ impl Client {
             Error::credential("(invalid path)", err!("Path is not valid Unicode"))
         }));
         trace!("getting secure credential {}", path_str);
-        self.backend.file(&self.sf, path_str).map_err(|e| {
+        self.backend.file(&self.secretfile, path_str).map_err(|e| {
             let err = Error::credential(path_str, e);
             warn!("{}", err);
             err

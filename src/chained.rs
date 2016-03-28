@@ -24,18 +24,30 @@ impl Client {
     }
 
     /// Set up the standard chain, based on what appears to be available.
-    pub fn default() -> Result<Client, Error> {
+    pub fn with_default_backends(allow_override: bool) -> Result<Client, Error>
+    {
         let mut client = Client::new();
-        client.add(try!(envvar::Client::default()));
         if vault::Client::is_enabled() {
-            debug!("Enabling vault backend");
+            if allow_override {
+                client.add(try!(envvar::Client::default()));
+            }
             client.add(try!(vault::Client::default()));
+        } else {
+            client.add(try!(envvar::Client::default()));
         }
+
+        let names: Vec<_> = client.backends.iter().map(|b| b.name()).collect();
+        debug!("Enabled backends: {}", names.join(", "));
+
         Ok(client)
     }
 }
 
 impl Backend for Client {
+    fn name(&self) -> &'static str {
+        "chained"
+    }
+
     fn var(&mut self, secretfile: &Secretfile, credential: &str) ->
         Result<String, BoxedError>
     {
@@ -83,6 +95,10 @@ mod tests {
     }
 
     impl Backend for DummyClient {
+        fn name(&self) -> &'static str {
+            "dummy"
+        }
+
         fn var(&mut self, _secretfile: &Secretfile, credential: &str) ->
             Result<String, BoxedError>
         {

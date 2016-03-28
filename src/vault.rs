@@ -151,6 +151,10 @@ impl Client {
 }
 
 impl Backend for Client {
+    fn name(&self) -> &'static str {
+        "vault"
+    }
+
     fn var(&mut self, secretfile: &Secretfile, credential: &str) ->
         Result<String, BoxedError>
     {

@@ -18,6 +18,10 @@ impl Client {
 }
 
 impl Backend for Client {
+    fn name(&self) -> &'static str {
+        "env"
+    }
+
     fn var(&mut self, _secretfile: &Secretfile, credential: &str) ->
         Result<String, BoxedError>
     {

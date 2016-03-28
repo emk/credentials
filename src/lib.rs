@@ -11,6 +11,8 @@
 //! assert_eq!("secret", credentials::var("PASSWORD").unwrap());
 //! ```
 
+#![warn(missing_docs)]
+
 #[macro_use]
 extern crate hyper;
 #[macro_use]
@@ -66,12 +68,14 @@ impl Default for Options {
 impl Options {
     /// Specify a `Secretfile` for the `Client` to use.  This takes `self`
     /// by value, so it consumes the `Options` structure it is called on,
-    /// and returns a new one.
+    /// and returns a new one.  Defaults to `Secretfile::default()`.
     pub fn secretfile(mut self, secretfile: Secretfile) -> Options {
         self.secretfile = Some(secretfile);
         self
     }
 
+    /// Allow secrets in environment variables and local files to override
+    /// the ones specified in our `Secretfile`.  Defaults to true.
     pub fn allow_override(mut self, allow_override: bool) -> Options {
         self.allow_override = allow_override;
         self

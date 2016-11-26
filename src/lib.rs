@@ -13,6 +13,13 @@
 
 #![warn(missing_docs)]
 
+// Needed for error-chain.
+#![recursion_limit = "1024"]
+
+// We need hyper just for the `header!` macro, at least until reqwest
+// exports it.
+#[macro_use]
+extern crate error_chain;
 #[macro_use]
 extern crate hyper;
 #[macro_use]
@@ -20,9 +27,9 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 extern crate regex;
+#[macro_use]
+extern crate reqwest;
 extern crate rustc_serialize;
-#[cfg(test)] #[macro_use]
-extern crate yup_hyper_mock as hyper_mock;
 
 use backend::Backend;
 use errors::{ErrorNew, err};

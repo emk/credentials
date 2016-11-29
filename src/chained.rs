@@ -2,7 +2,7 @@
 
 use backend::Backend;
 use envvar;
-use errors::{BoxedError, err, Error};
+use errors::*;
 use secretfile::Secretfile;
 use vault;
 
@@ -24,7 +24,7 @@ impl Client {
     }
 
     /// Set up the standard chain, based on what appears to be available.
-    pub fn with_default_backends(allow_override: bool) -> Result<Client, Error>
+    pub fn with_default_backends(allow_override: bool) -> Result<Client>
     {
         let mut client = Client::new();
         if vault::Client::is_enabled() {
@@ -49,31 +49,39 @@ impl Backend for Client {
     }
 
     fn var(&mut self, secretfile: &Secretfile, credential: &str) ->
-        Result<String, BoxedError>
+        Result<String>
     {
         // We want to return either the first success or the last error.
-        let mut result = Err(err("No backend available"));
+        let mut err: Option<Error> = None;
         for backend in self.backends.iter_mut() {
-            result = backend.var(secretfile, credential);
-            if result.is_ok() {
-                break;
+            match backend.var(secretfile, credential) {
+                Ok(value) => {
+                    return Ok(value);
+                }
+                Err(e) => {
+                    err = Some(e);
+                }
             }
         }
-        result
+        Err(err.unwrap_or_else(|| ErrorKind::NoBackend.into()))
     }
 
     fn file(&mut self, secretfile: &Secretfile, path: &str) ->
-        Result<String, BoxedError>
+        Result<String>
     {
         // We want to return either the first success or the last error.
-        let mut result = Err(err("No backend available"));
+        let mut err: Option<Error> = None;
         for backend in self.backends.iter_mut() {
-            result = backend.file(secretfile, path);
-            if result.is_ok() {
-                break;
+            match backend.file(secretfile, path) {
+                Ok(value) => {
+                    return Ok(value);
+                }
+                Err(e) => {
+                    err = Some(e);
+                }
             }
         }
-        result
+        Err(err.unwrap_or_else(|| ErrorKind::NoBackend.into()))
     }
 }
 
@@ -82,14 +90,14 @@ mod tests {
     use super::Client;
     use backend::Backend;
     use envvar;
-    use errors::{BoxedError, err, Error};
+    use errors::*;
     use secretfile::Secretfile;
     use std::env;
 
     struct DummyClient;
 
     impl DummyClient {
-        pub fn default() -> Result<DummyClient, Error> {
+        pub fn default() -> Result<DummyClient> {
             Ok(DummyClient)
         }
     }
@@ -100,22 +108,22 @@ mod tests {
         }
 
         fn var(&mut self, _secretfile: &Secretfile, credential: &str) ->
-            Result<String, BoxedError>
+            Result<String>
         {
             if credential == "DUMMY" {
                 Ok("dummy".to_owned())
             } else {
-                Err(err("Credential not supported"))
+                Err("Credential not supported".into())
             }
         }
 
         fn file(&mut self, _secretfile: &Secretfile, path: &str) ->
-            Result<String, BoxedError>
+            Result<String>
         {
             if path == "dummy.txt" {
                 Ok("dummy2".to_owned())
             } else {
-                Err(err("Credential not supported"))
+                Err("Credential not supported".into())
             }
         }
     }

@@ -1,116 +1,84 @@
 //! Various error types used internally, and in our public APIs.
 
-use std::error;
-// We just need this trait in scope for the methods, not its name.
-use std::error::Error as ErrorTrait;
-use std::fmt;
-use std::ops::Deref;
+#![allow(missing_docs)]
 
-//=========================================================================
-// BoxedError
+use reqwest;
+use rustc_serialize;
+use std::io;
+use std::path::PathBuf;
 
-/// A generic error type which can contain any error caused by any of the
-/// libraries we call.  This is used by our backend APIs for simplicity and
-/// extensibility, and because we don't really care very much about why
-/// things fail (at least not at this level).
-pub type BoxedError = Box<error::Error+Send+Sync>;
+error_chain! {
+    foreign_links {
+        io::Error, Io;
+        rustc_serialize::json::DecoderError, Json;
+        reqwest::UrlError, UnparseableUrl;
+    }
 
-/// Create a `BoxedError` with a simple string error.  We use this for
-/// internal errors that we want to keep simple.
-pub fn err<T: Into<String>>(message: T) -> BoxedError {
-    From::from(message.into())
-}
-
-/// Create a `BoxedError` from a format string and format arguments.
-macro_rules! err {
-    ($( $e:expr ),*) =>
-        ($crate::errors::err(format!($( $e ),*)));
-}
-
-
-//=========================================================================
-// Error
-
-/// An error returned by this library.  This also carries error-specific
-/// information.  Not currently public, because we might want to add more
-/// error types in the future without breaking API compatibility.
-#[derive(Debug)]
-enum ErrorKind {
-    Credential(String),
-    SecretfileParse,
-    Other,
-}
-
-/// Represents an error which occurred accessing credentials.
-#[derive(Debug)]
-pub struct Error {
-    kind: ErrorKind,
-    original: BoxedError,
-}
-
-/// These methods are public inside the crate, but not visible outside.
-pub trait ErrorNew {
-    /// Create a new credential-related error.
-    fn credential<S, E>(credential: S, err: E) -> Error
-        where S: Into<String>, E: Into<BoxedError>;
-
-    /// Create a new Secretfile-related error.
-    fn secretfile_parse<E>(err: E) -> Error
-        where E: Into<BoxedError>;
-}
-
-impl ErrorNew for Error {
-    fn credential<S, E>(credential: S, err: E) -> Error
-        where S: Into<String>, E: Into<BoxedError>
-    {
-        Error {
-            kind: ErrorKind::Credential(credential.into()),
-            original: err.into(),
+    errors {
+        Credential(name: String) {
+            description("can't access secure credential")
+            display("can't access secure credential '{}'", &name)
         }
-    }
-
-    fn secretfile_parse<E>(err: E) -> Error
-        where E: Into<BoxedError>
-    {
-        Error {
-            kind: ErrorKind::SecretfileParse,
-            original: err.into(),
+        FileRead(path: PathBuf) {
+            description("problem reading file")
+            display("problem reading file '{}'", path.display())
         }
-    }
-}
-
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match &self.kind {
-            &ErrorKind::Credential(_) => "can't access secure credential",
-            &ErrorKind::SecretfileParse => "error parsing Secretfile",
-            &ErrorKind::Other => self.original.description(),
+        InvalidUrl(url: String) {
+            description("invalid URL")
+            display("invalid URL '{}'", &url)
         }
-    }
-
-    fn cause(&self) -> Option<&error::Error> {
-        Some(self.original.deref() as &error::Error)
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self.kind {
-            &ErrorKind::Other => self.original.fmt(f),
-            &ErrorKind::Credential(ref name) =>
-                write!(f, "{} {}: {}", self.description(), name,
-                       self.original),
-            _ =>
-                write!(f, "{}: {}", self.description(),  &self.original),
+        MissingEntry(name: String) {
+            description("missing entry in Secretfile")
+            display("no entry for '{}' in Secretfile", &name)
         }
-    }
-}
-
-impl From<BoxedError> for Error {
-    fn from(err: BoxedError) -> Error {
-        Error {
-            kind: ErrorKind::Other,
-            original: err,
+        MissingKeyInPath(path: String) {
+            description("path is missing a ':key' component")
+            display("the path '{}' is missing a ':key' component", &path)
+        }
+        MissingKeyInSecret(secret: String, key: String) {
+            description("secret does not have value for specified key")
+            display("the secret '{}' does not have a value for the key '{}'",
+                    &secret, &key)
+        }
+        MissingVaultAddr {
+            description("VAULT_ADDR not specified")
+            display("VAULT_ADDR not specified")
+        }
+        MissingVaultToken {
+            description("cannot get either VAULT_TOKEN or ~/.vault_token")
+            display("cannot get either VAULT_TOKEN or ~/.vault_token")
+        }
+        NoBackend {
+            description("no credentials backend available")
+            display("no credentials backend available")
+        }
+        NoHomeDirectory {
+            description("can't find home directory")
+            display("can't find home directory")
+        }
+        NonUnicodePath(path: PathBuf) {
+            description("path cannot be represented as Unicode")
+            display("path '{}' cannot be represented as Unicode", path.display())
+        }
+        Parse(input: String) {
+            description("parsing error")
+            display("could not parse '{}'", &input)
+        }
+        Secretfile {
+            description("can't read Secretfile")
+            display("can't read Secretfile")
+        }
+        UndefinedEnvironmentVariable(name: String) {
+            description("undefined environment variable")
+            display("undefined environment variable '{}'", &name)
+        }
+        UnexpectedHttpStatus(status: reqwest::StatusCode) {
+            description("unexpected HTTP status")
+            display("unexpected HTTP status: {}", &status)
+        }
+        Url(url: reqwest::Url) {
+            description("could not access URL")
+            display("could not access URL '{}'", &url)
         }
     }
 }

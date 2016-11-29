@@ -5,7 +5,7 @@
 //! keys: from `MY_SECRET_PASSWORD` to the path `secret/my_secret` and the
 //! key `"password"`.
 
-use errors::{BoxedError, err, Error, ErrorNew};
+use errors::*;
 use regex::{Captures, Regex};
 use std::collections::{btree_map, BTreeMap};
 use std::env;
@@ -16,7 +16,7 @@ use std::path::Path;
 
 
 /// Interpolate environment variables into a string.
-fn interpolate_env(text: &str) -> Result<String, BoxedError> {
+fn interpolate_env(text: &str) -> Result<String> {
     // Only compile this Regex once.
     lazy_static! {
         static ref RE: Regex =
@@ -39,8 +39,7 @@ fn interpolate_env(text: &str) -> Result<String, BoxedError> {
     });
     match undefined_env_var {
         None => Ok(result),
-        Some(var) =>
-            Err(err!("Environment variable {} is not defined", var))
+        Some(var) => Err(ErrorKind::UndefinedEnvironmentVariable(var).into())
     }
 }
 
@@ -59,7 +58,7 @@ pub enum Location {
 impl Location {
     /// Create a new `Location` from a regex `Captures` containing the
     /// named match `path` and optionally `key`.
-    fn from_caps<'a>(caps: &Captures<'a>) -> Result<Location, BoxedError> {
+    fn from_caps<'a>(caps: &Captures<'a>) -> Result<Location> {
         match (caps.name("path"), caps.name("key")) {
             (Some(path), None) =>
                 Ok(Location::Path(try!(interpolate_env(path)))),
@@ -67,8 +66,7 @@ impl Location {
                 Ok(Location::PathWithKey(try!(interpolate_env(path)),
                                          key.to_owned())),
             (_, _) =>
-                Err(err!("Could not parse location: {}",
-                         caps.at(0).unwrap())),
+                Err(ErrorKind::Parse(caps.at(0).unwrap().to_owned()).into())
         }
     }
 }
@@ -82,7 +80,7 @@ pub struct Secretfile {
 }
 
 impl Secretfile {
-    fn read_internal(read: &mut io::Read) -> Result<Secretfile, BoxedError>
+    fn read_internal(read: &mut io::Read) -> Result<Secretfile>
     {
         // Only compile this Regex once.
         lazy_static! {
@@ -127,41 +125,38 @@ impl Secretfile {
                 }
                 Some(_) => { /* Blank or comment */ },
                 _ =>
-                    return Err(err!("Error parsing Secretfile line: {}", &line)),
+                    return Err(ErrorKind::Parse(line.to_owned()).into()),
             }
         }
         Ok(sf)
     }
 
     /// Read in from an `io::Read` object.
-    pub fn read(read: &mut io::Read) -> Result<Secretfile, Error>
+    pub fn read(read: &mut io::Read) -> Result<Secretfile>
     {
-        // Wrap our errors in a high-level API.
-        Secretfile::read_internal(read).map_err(|err| {
-            Error::secretfile_parse(err)
-        })
+        Secretfile::read_internal(read)
+            .chain_err(|| ErrorKind::Secretfile)
     }
 
     /// Read a `Secretfile` from a string.  Currently only used for testing.
-    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile, Error>
+    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile>
     {
         let mut cursor = io::Cursor::new(s.as_ref().as_bytes());
         Secretfile::read(&mut cursor)
     }
 
     /// Load the `Secretfile` at the specified path.
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile, Error>
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile>
     {
-        Secretfile::read(&mut try!(File::open(path).map_err(|err| {
-            Error::secretfile_parse(err)
-        })))
+        let path = path.as_ref();
+        let mkerr = || ErrorKind::FileRead(path.to_owned());
+        let mut file = File::open(path).chain_err(&mkerr)?;
+        Secretfile::read(&mut file).chain_err(&mkerr)
     }
 
     /// Load the default `Secretfile`.
-    pub fn default() -> Result<Secretfile, Error> {
-        let mut path = try!(env::current_dir().map_err(|err| {
-            Error::secretfile_parse(err)
-        }));
+    pub fn default() -> Result<Secretfile> {
+        let mut path = try!(env::current_dir().chain_err(|| ErrorKind::Secretfile));
         path.push("Secretfile");
         Secretfile::from_path(path)
     }

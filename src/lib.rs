@@ -32,7 +32,6 @@ extern crate reqwest;
 extern crate rustc_serialize;
 
 use backend::Backend;
-use errors::{ErrorNew, err};
 use std::cell::RefCell;
 use std::convert::AsRef;
 use std::default::Default;
@@ -44,14 +43,12 @@ use std::sync::{Mutex, MutexGuard};
 // strictly necessary, because we don't want to stablize too much at this
 // point.
 pub use secretfile::{Secretfile, SecretfileKeys};
-pub use errors::Error;
-
-#[macro_use]
-mod errors;
+pub use errors::{ChainErr, Error, ErrorKind, Result};
 
 mod backend;
 mod chained;
 mod envvar;
+mod errors;
 mod secretfile;
 mod vault;
 
@@ -101,7 +98,7 @@ pub struct Client {
 
 impl Client {
     /// Create a new client using the specified options.
-    pub fn new(options: Options) -> Result<Client, Error> {
+    pub fn new(options: Options) -> Result<Client> {
         let secretfile = match options.secretfile {
             Some(sf) => sf,
             None => try!(Secretfile::default()),
@@ -114,12 +111,12 @@ impl Client {
     }
 
     /// Create a new client using the default options.
-    pub fn default() -> Result<Client, Error> {
+    pub fn default() -> Result<Client> {
         Client::new(Default::default())
     }
 
     /// Create a new client using the specified `Secretfile`.
-    pub fn with_secretfile(secretfile: Secretfile) -> Result<Client, Error> {
+    pub fn with_secretfile(secretfile: Secretfile) -> Result<Client> {
         Client::new(Options::default().secretfile(secretfile))
     }
 
@@ -129,28 +126,34 @@ impl Client {
     }
 
     /// Fetch the value of an environment-variable-style credential.
-    pub fn var<S: AsRef<str>>(&mut self, name: S) -> Result<String, Error> {
+    pub fn var<S: AsRef<str>>(&mut self, name: S) -> Result<String> {
         let name_ref = name.as_ref();
         trace!("getting secure credential {}", name_ref);
-        self.backend.var(&self.secretfile, name_ref).map_err(|e| {
-            let err = Error::credential(name_ref, e);
-            warn!("{}", err);
-            err
-        })
+        self.backend.var(&self.secretfile, name_ref)
+            .chain_err(|| ErrorKind::Credential(name_ref.to_owned()))
+            .map_err(|err| {
+                error!("{}", &err);
+                err
+            })
     }
 
     /// Fetch the value of a file-style credential.
-    pub fn file<S: AsRef<Path>>(&mut self, path: S) -> Result<String, Error> {
+    pub fn file<S: AsRef<Path>>(&mut self, path: S) -> Result<String> {
         let path_ref = path.as_ref();
-        let path_str = try!(path_ref.to_str().ok_or_else(|| {
-            Error::credential("(invalid path)", err!("Path is not valid Unicode"))
-        }));
+        let path_str = try!(path_ref.to_str()
+            .ok_or_else(|| {
+                let err: Error =
+                    ErrorKind::NonUnicodePath(path_ref.to_owned()).into();
+                err
+            })
+            .chain_err(|| ErrorKind::Credential(format!("{}", path_ref.display()))));
         trace!("getting secure credential {}", path_str);
-        self.backend.file(&self.secretfile, path_str).map_err(|e| {
-            let err = Error::credential(path_str, e);
-            warn!("{}", err);
-            err
-        })
+        self.backend.file(&self.secretfile, path_str)
+            .chain_err(|| ErrorKind::Credential(path_str.to_owned()))
+            .map_err(|err| {
+                error!("{}", &err);
+                err
+            })
     }
 }
 
@@ -171,8 +174,8 @@ lazy_static! {
 
 /// Call `body` with the default global client, or return an error if we
 /// can't allocate a default global client.
-fn with_client<F>(body: F) -> Result<String, Error>
-    where F: FnOnce(&mut Client) -> Result<String, Error>
+fn with_client<F>(body: F) -> Result<String>
+    where F: FnOnce(&mut Client) -> Result<String>
 {
     let client_cell: MutexGuard<_> = CLIENT.lock().unwrap();
 
@@ -194,12 +197,12 @@ fn with_client<F>(body: F) -> Result<String, Error>
 }
 
 /// Fetch the value of an environment-variable-style credential.
-pub fn var<S: AsRef<str>>(name: S) -> Result<String, Error> {
+pub fn var<S: AsRef<str>>(name: S) -> Result<String> {
     with_client(|client| client.var(name))
 }
 
 /// Fetch the value of a file-style credential.
-pub fn file<S: AsRef<Path>>(path: S) -> Result<String, Error> {
+pub fn file<S: AsRef<Path>>(path: S) -> Result<String> {
     with_client(|client| client.file(path))
 }
 

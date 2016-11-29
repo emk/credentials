@@ -1,7 +1,7 @@
 //! A backend which reads from environment variables.
 
 use backend::Backend;
-use errors::{BoxedError, Error};
+use errors::*;
 use secretfile::Secretfile;
 use std::env;
 use std::fs;
@@ -12,7 +12,7 @@ pub struct Client;
 
 impl Client {
     /// Create a new environment variable client.
-    pub fn default() -> Result<Client, Error> {
+    pub fn default() -> Result<Client> {
         Ok(Client)
     }
 }
@@ -23,15 +23,18 @@ impl Backend for Client {
     }
 
     fn var(&mut self, _secretfile: &Secretfile, credential: &str) ->
-        Result<String, BoxedError>
+        Result<String>
     {
-        let value = try!(env::var(credential));
+        let value = try!(env::var(credential)
+            .chain_err(|| {
+                ErrorKind::UndefinedEnvironmentVariable(credential.to_owned())
+            }));
         debug!("Found credential {} in environment", credential);
         Ok(value)
     }
 
     fn file(&mut self, _secretfile: &Secretfile, path: &str) ->
-        Result<String, BoxedError>
+        Result<String>
     {
         let mut f = try!(fs::File::open(path));
         let mut contents = String::new();

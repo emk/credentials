@@ -15,7 +15,7 @@ pub struct Client {
 impl Client {
     /// Create a new environment variable client.
     fn new() -> Client {
-        Client { backends: vec!() }
+        Client { backends: vec![] }
     }
 
     /// Add a new backend to our list, after the existing ones.
@@ -24,16 +24,15 @@ impl Client {
     }
 
     /// Set up the standard chain, based on what appears to be available.
-    pub fn with_default_backends(allow_override: bool) -> Result<Client>
-    {
+    pub fn with_default_backends(allow_override: bool) -> Result<Client> {
         let mut client = Client::new();
         if vault::Client::is_enabled() {
             if allow_override {
-                client.add(try!(envvar::Client::default()));
+                client.add(envvar::Client::default()?);
             }
-            client.add(try!(vault::Client::default()));
+            client.add(vault::Client::default()?);
         } else {
-            client.add(try!(envvar::Client::default()));
+            client.add(envvar::Client::default()?);
         }
 
         let names: Vec<_> = client.backends.iter().map(|b| b.name()).collect();
@@ -48,9 +47,7 @@ impl Backend for Client {
         "chained"
     }
 
-    fn var(&mut self, secretfile: &Secretfile, credential: &str) ->
-        Result<String>
-    {
+    fn var(&mut self, secretfile: &Secretfile, credential: &str) -> Result<String> {
         // We want to return either the first success or the last error.
         let mut err: Option<Error> = None;
         for backend in self.backends.iter_mut() {
@@ -66,9 +63,7 @@ impl Backend for Client {
         Err(err.unwrap_or_else(|| ErrorKind::NoBackend.into()))
     }
 
-    fn file(&mut self, secretfile: &Secretfile, path: &str) ->
-        Result<String>
-    {
+    fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String> {
         // We want to return either the first success or the last error.
         let mut err: Option<Error> = None;
         for backend in self.backends.iter_mut() {
@@ -107,9 +102,10 @@ mod tests {
             "dummy"
         }
 
-        fn var(&mut self, _secretfile: &Secretfile, credential: &str) ->
-            Result<String>
-        {
+        fn var(&mut self,
+               _secretfile: &Secretfile,
+               credential: &str)
+               -> Result<String> {
             if credential == "DUMMY" {
                 Ok("dummy".to_owned())
             } else {
@@ -117,9 +113,7 @@ mod tests {
             }
         }
 
-        fn file(&mut self, _secretfile: &Secretfile, path: &str) ->
-            Result<String>
-        {
+        fn file(&mut self, _secretfile: &Secretfile, path: &str) -> Result<String> {
             if path == "dummy.txt" {
                 Ok("dummy2".to_owned())
             } else {

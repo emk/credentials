@@ -20,15 +20,19 @@ fn interpolate_env(text: &str) -> Result<String> {
     // Only compile this Regex once.
     lazy_static! {
         static ref RE: Regex =
-            Regex::new(r"\$(?:(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)|\{(?P<name2>[a-zA-Z_][a-zA-Z0-9_]*)\})").unwrap();
+            Regex::new(r"(?x)
+\$(?:
+    (?P<name>[a-zA-Z_][a-zA-Z0-9_]*)
+  |
+    \{(?P<name2>[a-zA-Z_][a-zA-Z0-9_]*)\}
+  )").unwrap();
     }
 
     // Perform the replacement.  This is mostly error-handling logic,
     // because `replace_all` doesn't anticipate any errors.
     let mut undefined_env_var = None;
     let result = RE.replace_all(text, |caps: &Captures| {
-        let name =
-            caps.name("name").or_else(|| { caps.name("name2") }).unwrap();
+        let name = caps.name("name").or_else(|| caps.name("name2")).unwrap();
         match env::var(name) {
             Ok(s) => s.to_owned(),
             Err(_) => {
@@ -39,7 +43,7 @@ fn interpolate_env(text: &str) -> Result<String> {
     });
     match undefined_env_var {
         None => Ok(result),
-        Some(var) => Err(ErrorKind::UndefinedEnvironmentVariable(var).into())
+        Some(var) => Err(ErrorKind::UndefinedEnvironmentVariable(var).into()),
     }
 }
 
@@ -60,13 +64,11 @@ impl Location {
     /// named match `path` and optionally `key`.
     fn from_caps<'a>(caps: &Captures<'a>) -> Result<Location> {
         match (caps.name("path"), caps.name("key")) {
-            (Some(path), None) =>
-                Ok(Location::Path(try!(interpolate_env(path)))),
-            (Some(path), Some(key)) =>
-                Ok(Location::PathWithKey(try!(interpolate_env(path)),
-                                         key.to_owned())),
-            (_, _) =>
-                Err(ErrorKind::Parse(caps.at(0).unwrap().to_owned()).into())
+            (Some(path), None) => Ok(Location::Path(interpolate_env(path)?)),
+            (Some(path), Some(key)) => {
+                Ok(Location::PathWithKey(interpolate_env(path)?, key.to_owned()))
+            }
+            (_, _) => Err(ErrorKind::Parse(caps.at(0).unwrap().to_owned()).into()),
         }
     }
 }
@@ -80,8 +82,7 @@ pub struct Secretfile {
 }
 
 impl Secretfile {
-    fn read_internal(read: &mut io::Read) -> Result<Secretfile>
-    {
+    fn read_internal(read: &mut io::Read) -> Result<Secretfile> {
         // Only compile this Regex once.
         lazy_static! {
             // Match an individual line in a Secretfile.
@@ -110,44 +111,40 @@ impl Secretfile {
         };
         let buffer = io::BufReader::new(read);
         for line_or_err in buffer.lines() {
-            let line = try!(line_or_err);
+            let line = line_or_err?;
             match RE.captures(&line) {
                 Some(ref caps) if caps.name("path").is_some() => {
-                    let location = try!(Location::from_caps(caps));
+                    let location = Location::from_caps(caps)?;
                     if caps.name("file").is_some() {
-                        let file =
-                            try!(interpolate_env(caps.name("file").unwrap()));
+                        let file = interpolate_env(caps.name("file").unwrap())?;
                         sf.filemap.insert(file, location);
                     } else if caps.name("var").is_some() {
                         let var = caps.name("var").unwrap().to_owned();
                         sf.varmap.insert(var, location);
                     }
                 }
-                Some(_) => { /* Blank or comment */ },
-                _ =>
-                    return Err(ErrorKind::Parse(line.to_owned()).into()),
+                Some(_) => {
+                    // Blank or comment
+                }
+                _ => return Err(ErrorKind::Parse(line.to_owned()).into()),
             }
         }
         Ok(sf)
     }
 
     /// Read in from an `io::Read` object.
-    pub fn read(read: &mut io::Read) -> Result<Secretfile>
-    {
-        Secretfile::read_internal(read)
-            .chain_err(|| ErrorKind::Secretfile)
+    pub fn read(read: &mut io::Read) -> Result<Secretfile> {
+        Secretfile::read_internal(read).chain_err(|| ErrorKind::Secretfile)
     }
 
     /// Read a `Secretfile` from a string.  Currently only used for testing.
-    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile>
-    {
+    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile> {
         let mut cursor = io::Cursor::new(s.as_ref().as_bytes());
         Secretfile::read(&mut cursor)
     }
 
     /// Load the `Secretfile` at the specified path.
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile>
-    {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile> {
         let path = path.as_ref();
         let mkerr = || ErrorKind::FileRead(path.to_owned());
         let mut file = File::open(path).chain_err(&mkerr)?;
@@ -156,7 +153,7 @@ impl Secretfile {
 
     /// Load the default `Secretfile`.
     pub fn default() -> Result<Secretfile> {
-        let mut path = try!(env::current_dir().chain_err(|| ErrorKind::Secretfile));
+        let mut path = env::current_dir().chain_err(|| ErrorKind::Secretfile)?;
         path.push("Secretfile");
         Secretfile::from_path(path)
     }
@@ -230,20 +227,17 @@ FOO_USERNAME2 ${SECRET_NAME}_username\n\
     env::set_var("SECRET_NAME", "foo");
     env::set_var("SOMEDIR", "/home/foo");
     let secretfile = Secretfile::from_str(data).unwrap();
-    assert_eq!(&Location::PathWithKey("secret/foo".to_owned(),
-                                      "username".to_owned()),
+    assert_eq!(&Location::PathWithKey("secret/foo".to_owned(), "username".to_owned()),
                secretfile.var("FOO_USERNAME").unwrap());
-    assert_eq!(&Location::PathWithKey("secret/foo".to_owned(),
-                                      "password".to_owned()),
+    assert_eq!(&Location::PathWithKey("secret/foo".to_owned(), "password".to_owned()),
                secretfile.var("FOO_PASSWORD").unwrap());
     assert_eq!(&Location::Path("foo_username".to_owned()),
                secretfile.var("FOO_USERNAME2").unwrap());
-    assert_eq!(&Location::PathWithKey("secret/ssl".to_owned(),
-                                      "key_pem".to_owned()),
+    assert_eq!(&Location::PathWithKey("secret/ssl".to_owned(), "key_pem".to_owned()),
                secretfile.file("/home/foo/.conf/key.pem").unwrap());
 
-    assert_eq!(vec!("FOO_PASSWORD", "FOO_USERNAME", "FOO_USERNAME2"),
+    assert_eq!(vec!["FOO_PASSWORD", "FOO_USERNAME", "FOO_USERNAME2"],
                secretfile.vars().collect::<Vec<_>>());
-    assert_eq!(vec!("/home/foo/.conf/key.pem"),
+    assert_eq!(vec!["/home/foo/.conf/key.pem"],
                secretfile.files().collect::<Vec<_>>());
 }

@@ -16,8 +16,7 @@ header! { (XVaultToken, "X-Vault-Token") => [String] }
 
 /// The default vault server address.
 fn default_addr() -> Result<String> {
-    env::var("VAULT_ADDR")
-        .map_err(|_| ErrorKind::MissingVaultAddr.into())
+    env::var("VAULT_ADDR").map_err(|_| ErrorKind::MissingVaultAddr.into())
 }
 
 /// The default vault token.
@@ -25,17 +24,16 @@ fn default_token() -> Result<String> {
     env::var("VAULT_TOKEN")
         .or_else(|_: env::VarError| -> Result<String> {
             // Build a path to ~/.vault-token.
-            let mut path = try!(env::home_dir()
-                .ok_or_else(|| {
+            let mut path = env::home_dir().ok_or_else(|| {
                     let err: Error = ErrorKind::NoHomeDirectory.into();
                     err
-                }));
+                })?;
             path.push(".vault-token");
 
             // Read the file.
-            let mut f = try!(File::open(path));
+            let mut f = File::open(path)?;
             let mut token = String::new();
-            try!(f.read_to_string(&mut token));
+            f.read_to_string(&mut token)?;
             Ok(token)
         })
         .chain_err(|| ErrorKind::MissingVaultToken)
@@ -74,21 +72,18 @@ impl Client {
     /// environment variables and files used by the `vault` CLI tool and
     /// the Ruby `vault` gem.
     pub fn default() -> Result<Client> {
-        let client = try!(reqwest::Client::new()
-            .map_err(|e| {
+        let client = reqwest::Client::new().map_err(|e| {
                 let err: Error = format!("{}", e).into();
                 err
-            }));
-        Client::new(client,
-                    &try!(default_addr()),
-                    try!(default_token()))
+            })?;
+        Client::new(client, &default_addr()?, default_token()?)
     }
 
-    fn new<U,S>(client: reqwest::Client, addr: U, token: S) ->
-        Result<Client>
-        where U: reqwest::IntoUrl, S: Into<String>
+    fn new<U, S>(client: reqwest::Client, addr: U, token: S) -> Result<Client>
+        where U: reqwest::IntoUrl,
+              S: Into<String>
     {
-        let addr = try!(addr.into_url());
+        let addr = addr.into_url()?;
         Ok(Client {
             client: client,
             addr: addr,
@@ -98,7 +93,7 @@ impl Client {
     }
 
     fn get_secret(&self, path: &str) -> Result<Secret> {
-        let url = try!(self.addr.join(&format!("v1/{}", path)));
+        let url = self.addr.join(&format!("v1/{}", path))?;
         debug!("Getting secret {}", url);
 
         let req = self.client.get(url.clone())
@@ -106,7 +101,7 @@ impl Client {
             // after inactivity.
             .header(Connection::close())
             .header(XVaultToken(self.token.clone()));
-        let mut res = try!(req.send().map_err(|e| format!("{}", e)));
+        let mut res = req.send().map_err(|e| format!("{}", e))?;
 
         // Generate informative errors for HTTP failures, because these can
         // be caused by everything from bad URLs to overly restrictive
@@ -114,21 +109,20 @@ impl Client {
         if !res.status().is_success() {
             let status = res.status().to_owned();
             let err: Error = ErrorKind::UnexpectedHttpStatus(status).into();
-            return Err(err).chain_err(|| ErrorKind::Url(url))
+            return Err(err).chain_err(|| ErrorKind::Url(url));
         }
 
         let mut body = String::new();
-        try!(res.read_to_string(&mut body));
-        Ok(try!(json::decode(&body)))
+        res.read_to_string(&mut body)?;
+        Ok(json::decode(&body)?)
     }
 
-    fn get_loc(&mut self, searched_for: &str, loc: Option<Location>) ->
-        Result<String>
-    {
+    fn get_loc(&mut self,
+               searched_for: &str,
+               loc: Option<Location>)
+               -> Result<String> {
         match loc {
-            None => {
-                Err(ErrorKind::MissingEntry(searched_for.to_owned()).into())
-            }
+            None => Err(ErrorKind::MissingEntry(searched_for.to_owned()).into()),
             Some(Location::PathWithKey(ref path, ref key)) => {
                 // If we haven't cached this secret, do so.  This is
                 // necessary to correctly support dynamic credentials,
@@ -136,7 +130,7 @@ impl Client {
                 // secret, and fetching the secret once per key will result
                 // in mismatched username/password pairs or whatever.
                 if !self.secrets.contains_key(path) {
-                    let secret = try!(self.get_secret(path));
+                    let secret = self.get_secret(path)?;
                     self.secrets.insert(path.to_owned(), secret);
                 }
 
@@ -145,11 +139,13 @@ impl Client {
                 let secret = self.secrets.get(path).unwrap();
 
                 // Look up the specified key in our secret's data bag.
-                secret.data.get(key)
+                secret.data
+                    .get(key)
                     .ok_or_else(|| {
                         let err: Error =
                             ErrorKind::MissingKeyInSecret(path.to_owned(),
-                                                          key.to_owned()).into();
+                                                          key.to_owned())
+                                .into();
                         err
                     })
                     .map(|v| v.clone())
@@ -166,16 +162,12 @@ impl Backend for Client {
         "vault"
     }
 
-    fn var(&mut self, secretfile: &Secretfile, credential: &str) ->
-        Result<String>
-    {
+    fn var(&mut self, secretfile: &Secretfile, credential: &str) -> Result<String> {
         let loc = secretfile.var(credential).cloned();
         self.get_loc(credential, loc)
     }
 
-    fn file(&mut self, secretfile: &Secretfile, path: &str) ->
-        Result<String>
-    {
+    fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String> {
         let loc = secretfile.file(path).cloned();
         self.get_loc(path, loc)
     }

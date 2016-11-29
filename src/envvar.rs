@@ -22,23 +22,18 @@ impl Backend for Client {
         "env"
     }
 
-    fn var(&mut self, _secretfile: &Secretfile, credential: &str) ->
-        Result<String>
-    {
-        let value = try!(env::var(credential)
-            .chain_err(|| {
+    fn var(&mut self, _secretfile: &Secretfile, credential: &str) -> Result<String> {
+        let value = env::var(credential).chain_err(|| {
                 ErrorKind::UndefinedEnvironmentVariable(credential.to_owned())
-            }));
+            })?;
         debug!("Found credential {} in environment", credential);
         Ok(value)
     }
 
-    fn file(&mut self, _secretfile: &Secretfile, path: &str) ->
-        Result<String>
-    {
-        let mut f = try!(fs::File::open(path));
+    fn file(&mut self, _secretfile: &Secretfile, path: &str) -> Result<String> {
+        let mut f = fs::File::open(path)?;
         let mut contents = String::new();
-        try!(f.read_to_string(&mut contents));
+        f.read_to_string(&mut contents)?;
         debug!("Found credential in local file {}", path);
         Ok(contents)
     }

@@ -9,10 +9,8 @@ pub trait Backend: Send + Sync {
     fn name(&self) -> &'static str;
 
     /// Get the value of the specified secret.
-    fn var(&mut self, secretfile: &Secretfile, credential: &str) ->
-        Result<String>;
+    fn var(&mut self, secretfile: &Secretfile, credential: &str) -> Result<String>;
 
     /// Get the value of the specified credential file.
-    fn file(&mut self, secretfile: &Secretfile, path: &str) ->
-        Result<String>;
+    fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String>;
 }

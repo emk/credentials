@@ -101,12 +101,12 @@ impl Client {
     pub fn new(options: Options) -> Result<Client> {
         let secretfile = match options.secretfile {
             Some(sf) => sf,
-            None => try!(Secretfile::default()),
+            None => Secretfile::default()?,
         };
         let over = options.allow_override;
         Ok(Client {
             secretfile: secretfile,
-            backend: try!(chained::Client::with_default_backends(over)),
+            backend: chained::Client::with_default_backends(over)?,
         })
     }
 
@@ -129,7 +129,8 @@ impl Client {
     pub fn var<S: AsRef<str>>(&mut self, name: S) -> Result<String> {
         let name_ref = name.as_ref();
         trace!("getting secure credential {}", name_ref);
-        self.backend.var(&self.secretfile, name_ref)
+        self.backend
+            .var(&self.secretfile, name_ref)
             .chain_err(|| ErrorKind::Credential(name_ref.to_owned()))
             .map_err(|err| {
                 error!("{}", &err);
@@ -140,15 +141,15 @@ impl Client {
     /// Fetch the value of a file-style credential.
     pub fn file<S: AsRef<Path>>(&mut self, path: S) -> Result<String> {
         let path_ref = path.as_ref();
-        let path_str = try!(path_ref.to_str()
+        let path_str = path_ref.to_str()
             .ok_or_else(|| {
-                let err: Error =
-                    ErrorKind::NonUnicodePath(path_ref.to_owned()).into();
+                let err: Error = ErrorKind::NonUnicodePath(path_ref.to_owned()).into();
                 err
             })
-            .chain_err(|| ErrorKind::Credential(format!("{}", path_ref.display()))));
+            .chain_err(|| ErrorKind::Credential(format!("{}", path_ref.display())))?;
         trace!("getting secure credential {}", path_str);
-        self.backend.file(&self.secretfile, path_str)
+        self.backend
+            .file(&self.secretfile, path_str)
             .chain_err(|| ErrorKind::Credential(path_str.to_owned()))
             .map_err(|err| {
                 error!("{}", &err);
@@ -181,7 +182,7 @@ fn with_client<F>(body: F) -> Result<String>
 
     // Try to set up the client if we haven't already.
     if client_cell.borrow().is_none() {
-        *client_cell.borrow_mut() = Some(try!(Client::default()));
+        *client_cell.borrow_mut() = Some(Client::default()?);
     }
 
     // Call the provided function.  I have to break out `result` separately
@@ -191,7 +192,7 @@ fn with_client<F>(body: F) -> Result<String>
         &mut Some(ref mut client) => body(client),
         // We theoretically handed this just above, and exited if we
         // failed.
-        &mut None => panic!("Should have a client, but we don't")
+        &mut None => panic!("Should have a client, but we don't"),
     };
     result
 }

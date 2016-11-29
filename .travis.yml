@@ -5,18 +5,7 @@ rust:
 - beta
 - nightly
 before_script:
-- |
-  pip install 'travis-cargo<0.2' --user &&
-  export PATH=$HOME/.local/bin:$PATH
+- "export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
 script:
-- |
-  travis-cargo build &&
-  travis-cargo test &&
-  travis-cargo bench &&
-  travis-cargo doc
-after_success:
-- travis-cargo --only nightly doc-upload
-- travis-cargo coveralls
-env:
-  global:
-  - secure: JVppvqlK5W5Iapee3gtdgF6hYpUcIQM0FvAP1RQx7ti7gpHEdHNkimgCASzXBCkuV7xJXBwY1nTV+5vJODI/B5F0O3e0CRwRKcBD1pWbZRj9Zodp1CGDEoOC1AV39pIeMRG8h5cPpz0268AzIP4OaFX9F40ZR0hoe2kx3kHMWSRlq8IJ7aTMLGt7Gz2uAbx9SB41R/7G9A6c87LzzPj2abTPW4zdPg7TFc9/9bzAjNNxHGNeCKI6PyFnKbo6lO5t3cAHVlb48e3yBynLiePCodcvAAe0qYo43Bv54kPIxKawbl3kqyLl1PmLQQf92DUG3+meBxIpOPBDA85xEwyyv82ZEGtq6lvHCCGc1sZCiLQh8RZ1AQjMVUuRncLPZit03gB7plvY/dWbnCfV/1poj/YB8rdTBvqnATH1ZKDjA/7aTZYvMT/UC4J1BbUA0QRf4V617mbiRzZjZqQLXP3Ah8/xew0Re6L1WRWofY5bCsptHdEksSrmQjaJXQoovvvoNaEGRYJsAmJiGUoY1XtfZI3PHtkKRADoOu/6cEXjt5cTXHpLyVHLoHS0WwRPfqMDdVZQVCSRuUBvYhTXj5ZSzr242/kWLNhpM05r7Cv/v6acgRFLXDZqSMbikvoJt7lbYk8u/9PFRv1pYw2e0AaCwQOYi/6U10C3t9EW5A+dnIY=
+- cargo build
+- cargo test

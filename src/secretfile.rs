@@ -32,7 +32,9 @@ fn interpolate_env(text: &str) -> Result<String> {
     // because `replace_all` doesn't anticipate any errors.
     let mut undefined_env_var = None;
     let result = RE.replace_all(text, |caps: &Captures| {
-        let name = caps.name("name").or_else(|| caps.name("name2")).unwrap();
+        let name = caps.name("name").or_else(|| caps.name("name2"))
+            .unwrap()
+            .as_str();
         match env::var(name) {
             Ok(s) => s.to_owned(),
             Err(_) => {
@@ -42,7 +44,7 @@ fn interpolate_env(text: &str) -> Result<String> {
         }
     });
     match undefined_env_var {
-        None => Ok(result),
+        None => Ok(result.into_owned()),
         Some(var) => Err(ErrorKind::UndefinedEnvironmentVariable(var).into()),
     }
 }
@@ -63,12 +65,17 @@ impl Location {
     /// Create a new `Location` from a regex `Captures` containing the
     /// named match `path` and optionally `key`.
     fn from_caps<'a>(caps: &Captures<'a>) -> Result<Location> {
-        match (caps.name("path"), caps.name("key")) {
+        let path_opt = caps.name("path").map(|m| m.as_str());
+        let key_opt = caps.name("key").map(|m| m.as_str());
+        match (path_opt, key_opt) {
             (Some(path), None) => Ok(Location::Path(interpolate_env(path)?)),
             (Some(path), Some(key)) => {
                 Ok(Location::PathWithKey(interpolate_env(path)?, key.to_owned()))
             }
-            (_, _) => Err(ErrorKind::Parse(caps.at(0).unwrap().to_owned()).into()),
+            (_, _) => {
+                let all = caps.get(0).unwrap().as_str().to_owned();
+                Err(ErrorKind::Parse(all).into())
+            }
         }
     }
 }
@@ -116,10 +123,11 @@ impl Secretfile {
                 Some(ref caps) if caps.name("path").is_some() => {
                     let location = Location::from_caps(caps)?;
                     if caps.name("file").is_some() {
-                        let file = interpolate_env(caps.name("file").unwrap())?;
+                        let file =
+                            interpolate_env(caps.name("file").unwrap().as_str())?;
                         sf.filemap.insert(file, location);
                     } else if caps.name("var").is_some() {
-                        let var = caps.name("var").unwrap().to_owned();
+                        let var = caps.name("var").unwrap().as_str().to_owned();
                         sf.varmap.insert(var, location);
                     }
                 }

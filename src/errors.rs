@@ -9,9 +9,9 @@ use std::path::PathBuf;
 
 error_chain! {
     foreign_links {
-        io::Error, Io;
-        rustc_serialize::json::DecoderError, Json;
-        reqwest::UrlError, UnparseableUrl;
+        Io(io::Error);
+        Json(rustc_serialize::json::DecoderError);
+        UnparseableUrl(reqwest::UrlError);
     }
 
     errors {

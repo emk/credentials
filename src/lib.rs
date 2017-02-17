@@ -43,7 +43,7 @@ use std::sync::{Mutex, MutexGuard};
 // strictly necessary, because we don't want to stablize too much at this
 // point.
 pub use secretfile::{Secretfile, SecretfileKeys};
-pub use errors::{ChainErr, Error, ErrorKind, Result};
+pub use errors::{Error, ErrorKind, Result, ResultExt};
 
 mod backend;
 mod chained;

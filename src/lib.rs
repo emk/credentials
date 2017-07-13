@@ -27,7 +27,6 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 extern crate regex;
-#[macro_use]
 extern crate reqwest;
 extern crate rustc_serialize;
 

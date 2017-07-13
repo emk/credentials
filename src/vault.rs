@@ -96,12 +96,15 @@ impl Client {
         let url = self.addr.join(&format!("v1/{}", path))?;
         debug!("Getting secret {}", url);
 
-        let req = self.client.get(url.clone())
+        let mkerr = || ErrorKind::Url(url.clone());
+        let mut res = self.client.get(url.clone())
+            .chain_err(&mkerr)?
             // Leaving the connection open will cause errors on reconnect
             // after inactivity.
             .header(Connection::close())
-            .header(XVaultToken(self.token.clone()));
-        let mut res = req.send().map_err(|e| format!("{}", e))?;
+            .header(XVaultToken(self.token.clone()))
+            .send()
+            .chain_err(&mkerr)?;
 
         // Generate informative errors for HTTP failures, because these can
         // be caused by everything from bad URLs to overly restrictive
@@ -109,7 +112,7 @@ impl Client {
         if !res.status().is_success() {
             let status = res.status().to_owned();
             let err: Error = ErrorKind::UnexpectedHttpStatus(status).into();
-            return Err(err).chain_err(|| ErrorKind::Url(url));
+            return Err(err).chain_err(&mkerr);
         }
 
         let mut body = String::new();

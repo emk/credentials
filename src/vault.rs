@@ -4,8 +4,8 @@ use backend::Backend;
 use errors::*;
 use reqwest;
 use reqwest::header::Connection;
-use rustc_serialize::json;
 use secretfile::{Location, Secretfile, SecretfileLookup};
+use serde_json;
 use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
@@ -42,7 +42,7 @@ fn default_token() -> Result<String> {
 /// Secret data retrieved from Vault.  This has a bunch more fields, but
 /// the exact list of fields doesn't seem to be documented anywhere, so
 /// let's be conservative.
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 struct Secret {
     /// The key-value pairs associated with this secret.
     data: BTreeMap<String, String>,
@@ -117,7 +117,7 @@ impl Client {
 
         let mut body = String::new();
         res.read_to_string(&mut body)?;
-        Ok(json::decode(&body)?)
+        Ok(serde_json::from_str(&body)?)
     }
 
     fn get_loc(&mut self,

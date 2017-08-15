@@ -3,14 +3,14 @@
 #![allow(missing_docs)]
 
 use reqwest;
-use rustc_serialize;
+use serde_json;
 use std::io;
 use std::path::PathBuf;
 
 error_chain! {
     foreign_links {
         Io(io::Error);
-        Json(rustc_serialize::json::DecoderError);
+        Json(serde_json::Error);
         UnparseableUrl(reqwest::UrlError);
     }
 

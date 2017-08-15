@@ -28,7 +28,9 @@ extern crate lazy_static;
 extern crate log;
 extern crate regex;
 extern crate reqwest;
-extern crate rustc_serialize;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 
 use backend::Backend;
 use std::cell::RefCell;

@@ -7,13 +7,24 @@
 
 use errors::*;
 use regex::{Captures, Regex};
+use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap};
 use std::env;
 use std::fs::File;
 use std::iter::Iterator;
 use std::io::{self, BufRead};
 use std::path::Path;
+use std::sync::Mutex;
 
+lazy_static! {
+    // For command-line binaries used directly by users, it may occasionally be
+    // desirable to build a `Secretfile` directly into an executable.
+    //
+    // For an explanation of `lazy_static!`, `Mutex` and the other funky Rust
+    // stuff going on here, see `CLIENT` in `lib.rs`.
+    static ref BUILT_IN_SECRETFILE: Mutex<RefCell<Option<Secretfile>>> =
+        Mutex::new(RefCell::new(None));
+}
 
 /// Interpolate environment variables into a string.
 fn interpolate_env(text: &str) -> Result<String> {
@@ -145,7 +156,7 @@ impl Secretfile {
         Secretfile::read_internal(read).chain_err(|| ErrorKind::Secretfile)
     }
 
-    /// Read a `Secretfile` from a string.  Currently only used for testing.
+    /// Read a `Secretfile` from a string.
     pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile> {
         let mut cursor = io::Cursor::new(s.as_ref().as_bytes());
         Secretfile::read(&mut cursor)
@@ -159,11 +170,36 @@ impl Secretfile {
         Secretfile::read(&mut file).chain_err(&mkerr)
     }
 
-    /// Load the default `Secretfile`.
+    /// Set a built-in `Secretfile`. This is intended for command-line
+    /// applications called directly by users, which do not normally have a
+    /// `Secretfile` in the current directory, and which probably want to ignore
+    /// one if it exists.
+    ///
+    /// This must be called before `credentials::var`.
+    pub fn set_built_in(secretfile: Option<Secretfile>) {
+        let guard = BUILT_IN_SECRETFILE
+            .lock()
+            .expect("Unable to lock `BUILT_IN_SECRETFILE`");
+         *guard.borrow_mut() = secretfile;
+    }
+
+    /// Load the default `Secretfile`. This is normally `Secretfile` in the
+    /// current working directory, but it can be overridden using
+    /// `Secretfile::set_built_in`.
     pub fn default() -> Result<Secretfile> {
-        let mut path = env::current_dir().chain_err(|| ErrorKind::Secretfile)?;
-        path.push("Secretfile");
-        Secretfile::from_path(path)
+        // We have to use some extra temporary variables to keep the borrow
+        // checker happy.
+        let guard = BUILT_IN_SECRETFILE
+            .lock()
+            .expect("Unable to lock `BUILT_IN_SECRETFILE`");
+        let built_in_opt = guard.borrow().to_owned();
+        if let Some(built_in) = built_in_opt {
+            Ok(built_in)
+        } else {
+            let mut path = env::current_dir().chain_err(|| ErrorKind::Secretfile)?;
+            path.push("Secretfile");
+            Secretfile::from_path(path)
+        }
     }
 
     /// Return an iterator over the environment variables listed in this

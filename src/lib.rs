@@ -40,8 +40,8 @@ use std::sync::{Mutex, MutexGuard};
 // Be very careful not to export any more of the Secretfile API than
 // strictly necessary, because we don't want to stablize too much at this
 // point.
-pub use secretfile::{Secretfile, SecretfileKeys};
 pub use errors::{Error, Result};
+pub use secretfile::{Secretfile, SecretfileKeys};
 
 mod backend;
 mod chained;
@@ -83,7 +83,6 @@ impl Options {
         self
     }
 }
-
 
 /// A client which fetches secrets.  Under normal circumstances, it's
 /// usually easier to use the static `credentials::var` and
@@ -129,31 +128,27 @@ impl Client {
         trace!("getting secure credential {}", name_ref);
         self.backend
             .var(&self.secretfile, name_ref)
-            .map_err(|err| {
-                Error::Credential {
-                    name: name_ref.to_owned(),
-                    cause: Box::new(err),
-                }
+            .map_err(|err| Error::Credential {
+                name: name_ref.to_owned(),
+                cause: Box::new(err),
             })
     }
 
     /// Fetch the value of a file-style credential.
     pub fn file<S: AsRef<Path>>(&mut self, path: S) -> Result<String> {
         let path_ref = path.as_ref();
-        let path_str = path_ref.to_str().ok_or_else(|| {
-            Error::Credential {
-                name: format!("{}", path_ref.display()),
-                cause: Box::new(Error::NonUnicodePath { path: path_ref.to_owned() }),
-            }
+        let path_str = path_ref.to_str().ok_or_else(|| Error::Credential {
+            name: format!("{}", path_ref.display()),
+            cause: Box::new(Error::NonUnicodePath {
+                path: path_ref.to_owned(),
+            }),
         })?;
         trace!("getting secure credential {}", path_str);
         self.backend
             .file(&self.secretfile, path_str)
-            .map_err(|err| {
-                Error::Credential {
-                    name: path_str.to_owned(),
-                    cause: Box::new(err),
-                }
+            .map_err(|err| Error::Credential {
+                name: path_str.to_owned(),
+                cause: Box::new(err),
             })
     }
 }
@@ -176,7 +171,8 @@ lazy_static! {
 /// Call `body` with the default global client, or return an error if we
 /// can't allocate a default global client.
 fn with_client<F>(body: F) -> Result<String>
-    where F: FnOnce(&mut Client) -> Result<String>
+where
+    F: FnOnce(&mut Client) -> Result<String>,
 {
     let client_cell: MutexGuard<_> = CLIENT.lock().unwrap();
 
@@ -209,9 +205,9 @@ pub fn file<S: AsRef<Path>>(path: S) -> Result<String> {
 
 #[cfg(test)]
 mod test {
+    use super::file;
     use std::fs;
     use std::io::Read;
-    use super::file;
 
     #[test]
     fn test_file() {

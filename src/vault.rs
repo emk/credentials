@@ -69,15 +69,15 @@ impl Client {
     /// environment variables and files used by the `vault` CLI tool and
     /// the Ruby `vault` gem.
     pub fn default() -> Result<Client> {
-        let client = reqwest::Client::new().map_err(|e| {
-            Error::Other(format_err!("{}", e))
-        })?;
+        let client =
+            reqwest::Client::new().map_err(|e| Error::Other(format_err!("{}", e)))?;
         Client::new(client, &default_addr()?, default_token()?)
     }
 
     fn new<U, S>(client: reqwest::Client, addr: U, token: S) -> Result<Client>
-        where U: reqwest::IntoUrl,
-              S: Into<String>
+    where
+        U: reqwest::IntoUrl,
+        S: Into<String>,
     {
         let addr = addr.into_url()?;
         Ok(Client {
@@ -92,8 +92,9 @@ impl Client {
         let url = self.addr.join(&format!("v1/{}", path))?;
         debug!("Getting secret {}", url);
 
-        let mkerr = |err| {
-            Error::Url { url: url.clone(), cause: Box::new(err) }
+        let mkerr = |err| Error::Url {
+            url: url.clone(),
+            cause: Box::new(err),
         };
         let mut res = self.client.get(url.clone())
             .map_err(|err| (&mkerr)(Error::Other(err.into())))?
@@ -109,7 +110,7 @@ impl Client {
         // vault policies.
         if !res.status().is_success() {
             let status = res.status().to_owned();
-            return Err(mkerr(Error::UnexpectedHttpStatus { status: status }))
+            return Err(mkerr(Error::UnexpectedHttpStatus { status: status }));
         }
 
         let mut body = String::new();
@@ -117,12 +118,15 @@ impl Client {
         Ok(serde_json::from_str(&body)?)
     }
 
-    fn get_loc(&mut self,
-               searched_for: &str,
-               loc: Option<Location>)
-               -> Result<String> {
+    fn get_loc(
+        &mut self,
+        searched_for: &str,
+        loc: Option<Location>,
+    ) -> Result<String> {
         match loc {
-            None => Err(Error::MissingEntry { name: searched_for.to_owned() }),
+            None => Err(Error::MissingEntry {
+                name: searched_for.to_owned(),
+            }),
             Some(Location::PathWithKey(ref path, ref key)) => {
                 // If we haven't cached this secret, do so.  This is
                 // necessary to correctly support dynamic credentials,
@@ -139,19 +143,18 @@ impl Client {
                 let secret = self.secrets.get(path).unwrap();
 
                 // Look up the specified key in our secret's data bag.
-                secret.data
+                secret
+                    .data
                     .get(key)
-                    .ok_or_else(|| {
-                        Error::MissingKeyInSecret {
-                            secret: path.to_owned(),
-                            key: key.to_owned(),
-                        }
+                    .ok_or_else(|| Error::MissingKeyInSecret {
+                        secret: path.to_owned(),
+                        key: key.to_owned(),
                     })
                     .map(|v| v.clone())
             }
-            Some(Location::Path(ref path)) => {
-                Err(Error::MissingKeyInPath { path: path.to_owned() })
-            }
+            Some(Location::Path(ref path)) => Err(Error::MissingKeyInPath {
+                path: path.to_owned(),
+            }),
         }
     }
 }

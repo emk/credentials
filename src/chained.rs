@@ -102,10 +102,11 @@ mod tests {
             "dummy"
         }
 
-        fn var(&mut self,
-               _secretfile: &Secretfile,
-               credential: &str)
-               -> Result<String> {
+        fn var(
+            &mut self,
+            _secretfile: &Secretfile,
+            credential: &str,
+        ) -> Result<String> {
             if credential == "DUMMY" {
                 Ok("dummy".to_owned())
             } else {

@@ -11,8 +11,8 @@ use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap};
 use std::env;
 use std::fs::File;
-use std::iter::Iterator;
 use std::io::{self, BufRead};
+use std::iter::Iterator;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -30,20 +30,22 @@ lazy_static! {
 fn interpolate_env(text: &str) -> Result<String> {
     // Only compile this Regex once.
     lazy_static! {
-        static ref RE: Regex =
-            Regex::new(r"(?x)
+        static ref RE: Regex = Regex::new(
+            r"(?x)
 \$(?:
     (?P<name>[a-zA-Z_][a-zA-Z0-9_]*)
   |
     \{(?P<name2>[a-zA-Z_][a-zA-Z0-9_]*)\}
-  )").unwrap();
+  )"
+        ).unwrap();
     }
 
     // Perform the replacement.  This is mostly error-handling logic,
     // because `replace_all` doesn't anticipate any errors.
     let mut err = None;
     let result = RE.replace_all(text, |caps: &Captures| {
-        let name = caps.name("name").or_else(|| caps.name("name2"))
+        let name = caps.name("name")
+            .or_else(|| caps.name("name2"))
             .unwrap()
             .as_str();
         match env::var(name) {
@@ -83,9 +85,10 @@ impl Location {
         let key_opt = caps.name("key").map(|m| m.as_str());
         match (path_opt, key_opt) {
             (Some(path), None) => Ok(Location::Path(interpolate_env(path)?)),
-            (Some(path), Some(key)) => {
-                Ok(Location::PathWithKey(interpolate_env(path)?, key.to_owned()))
-            }
+            (Some(path), Some(key)) => Ok(Location::PathWithKey(
+                interpolate_env(path)?,
+                key.to_owned(),
+            )),
             (_, _) => {
                 let all = caps.get(0).unwrap().as_str().to_owned();
                 Err(Error::Parse { input: all })
@@ -148,7 +151,11 @@ impl Secretfile {
                 Some(_) => {
                     // Blank or comment
                 }
-                _ => return Err(Error::Parse { input: line.to_owned() }),
+                _ => {
+                    return Err(Error::Parse {
+                        input: line.to_owned(),
+                    })
+                }
             }
         }
         Ok(sf)
@@ -156,9 +163,7 @@ impl Secretfile {
 
     /// Read in from an `io::Read` object.
     pub fn read(read: &mut io::Read) -> Result<Secretfile> {
-        Secretfile::read_internal(read).map_err(|err| {
-            Error::Secretfile(Box::new(err))
-        })
+        Secretfile::read_internal(read).map_err(|err| Error::Secretfile(Box::new(err)))
     }
 
     /// Read a `Secretfile` from a string.
@@ -170,17 +175,13 @@ impl Secretfile {
     /// Load the `Secretfile` at the specified path.
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile> {
         let path = path.as_ref();
-        let mut file = File::open(path).map_err(|err| {
-            Error::FileRead {
-                path: path.to_owned(),
-                cause: Box::new(err.into()),
-            }
+        let mut file = File::open(path).map_err(|err| Error::FileRead {
+            path: path.to_owned(),
+            cause: Box::new(err.into()),
         })?;
-        Secretfile::read(&mut file).map_err(|err| {
-            Error::FileRead {
-                path: path.to_owned(),
-                cause: Box::new(err),
-            }
+        Secretfile::read(&mut file).map_err(|err| Error::FileRead {
+            path: path.to_owned(),
+            cause: Box::new(err),
         })
     }
 
@@ -194,7 +195,7 @@ impl Secretfile {
         let guard = BUILT_IN_SECRETFILE
             .lock()
             .expect("Unable to lock `BUILT_IN_SECRETFILE`");
-         *guard.borrow_mut() = secretfile;
+        *guard.borrow_mut() = secretfile;
     }
 
     /// Load the default `Secretfile`. This is normally `Secretfile` in the
@@ -210,9 +211,8 @@ impl Secretfile {
         if let Some(built_in) = built_in_opt {
             Ok(built_in)
         } else {
-            let mut path = env::current_dir().map_err(|err| {
-                Error::Secretfile(Box::new(err.into()))
-            })?;
+            let mut path = env::current_dir()
+                .map_err(|err| Error::Secretfile(Box::new(err.into())))?;
             path.push("Secretfile");
             Secretfile::from_path(path)
         }
@@ -221,12 +221,16 @@ impl Secretfile {
     /// Return an iterator over the environment variables listed in this
     /// file.
     pub fn vars(&self) -> SecretfileKeys {
-        SecretfileKeys { keys: self.varmap.keys() }
+        SecretfileKeys {
+            keys: self.varmap.keys(),
+        }
     }
 
     /// Return an iterator over the credential files listed in this file.
     pub fn files(&self) -> SecretfileKeys {
-        SecretfileKeys { keys: self.filemap.keys() }
+        SecretfileKeys {
+            keys: self.filemap.keys(),
+        }
     }
 }
 
@@ -287,17 +291,29 @@ FOO_USERNAME2 ${SECRET_NAME}_username\n\
     env::set_var("SECRET_NAME", "foo");
     env::set_var("SOMEDIR", "/home/foo");
     let secretfile = Secretfile::from_str(data).unwrap();
-    assert_eq!(&Location::PathWithKey("secret/foo".to_owned(), "username".to_owned()),
-               secretfile.var("FOO_USERNAME").unwrap());
-    assert_eq!(&Location::PathWithKey("secret/foo".to_owned(), "password".to_owned()),
-               secretfile.var("FOO_PASSWORD").unwrap());
-    assert_eq!(&Location::Path("foo_username".to_owned()),
-               secretfile.var("FOO_USERNAME2").unwrap());
-    assert_eq!(&Location::PathWithKey("secret/ssl".to_owned(), "key_pem".to_owned()),
-               secretfile.file("/home/foo/.conf/key.pem").unwrap());
+    assert_eq!(
+        &Location::PathWithKey("secret/foo".to_owned(), "username".to_owned()),
+        secretfile.var("FOO_USERNAME").unwrap()
+    );
+    assert_eq!(
+        &Location::PathWithKey("secret/foo".to_owned(), "password".to_owned()),
+        secretfile.var("FOO_PASSWORD").unwrap()
+    );
+    assert_eq!(
+        &Location::Path("foo_username".to_owned()),
+        secretfile.var("FOO_USERNAME2").unwrap()
+    );
+    assert_eq!(
+        &Location::PathWithKey("secret/ssl".to_owned(), "key_pem".to_owned()),
+        secretfile.file("/home/foo/.conf/key.pem").unwrap()
+    );
 
-    assert_eq!(vec!["FOO_PASSWORD", "FOO_USERNAME", "FOO_USERNAME2"],
-               secretfile.vars().collect::<Vec<_>>());
-    assert_eq!(vec!["/home/foo/.conf/key.pem"],
-               secretfile.files().collect::<Vec<_>>());
+    assert_eq!(
+        vec!["FOO_PASSWORD", "FOO_USERNAME", "FOO_USERNAME2"],
+        secretfile.vars().collect::<Vec<_>>()
+    );
+    assert_eq!(
+        vec!["/home/foo/.conf/key.pem"],
+        secretfile.files().collect::<Vec<_>>()
+    );
 }

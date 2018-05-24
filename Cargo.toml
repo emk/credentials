@@ -9,7 +9,7 @@ repository = "https://github.com/emk/credentials"
 version = "0.8.0"
 
 [dependencies]
-error-chain = "0.10"
+failure = "0.1.1"
 hyper = { version = "0.11", default-features = false }
 lazy_static = "0.2"
 log = "0.3.5"

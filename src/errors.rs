@@ -1,84 +1,169 @@
 //! Various error types used internally, and in our public APIs.
 
-#![allow(missing_docs)]
-
+use failure;
 use reqwest;
 use serde_json;
+use std::env;
 use std::io;
 use std::path::PathBuf;
+use std::result;
 
-error_chain! {
-    foreign_links {
-        Io(io::Error);
-        Json(serde_json::Error);
-        UnparseableUrl(reqwest::UrlError);
+/// A result returned by functions in `Credentials`.
+pub type Result<T> = result::Result<T, Error>;
+
+/// An error returned by `credentials`.
+#[derive(Debug, Fail)]
+pub enum Error {
+    /// Could not access a secure credential.
+    #[fail(display="can't access secure credential '{}': {}", name, cause)]
+    Credential {
+        /// The name of the credential we couldn't access.
+        name: String,
+        /// The reason why we couldn't access it.
+        cause: Box<Error>,
+    },
+
+    /// Could not read file.
+    #[fail(display="problem reading file {:?}: {}", path, cause)]
+    FileRead {
+        /// The file we couldn't access.
+        path: PathBuf,
+        /// The reason why we couldn't access it.
+        cause: Box<Error>,
+    },
+
+    /// We encountered an invalid URL.
+    #[fail(display="invalid URL {:?}", url)]
+    InvalidUrl {
+        /// The invalid URL.
+        url: String,
+    },
+
+    /// An error occurred doing I/O.
+    #[fail(display="I/O error: {}", _0)]
+    Io(#[cause] io::Error),
+
+    /// We failed to parse JSON data.
+    #[fail(display="could not parse JSON: {}", _0)]
+    Json(#[cause] serde_json::Error),
+
+    /// Missing entry in Secretfile.
+    #[fail(display="no entry for '{}' in Secretfile", name)]
+    MissingEntry {
+        /// The name of the entry.
+        name: String,
+    },
+
+    /// Path is missing a ':key' component.
+    #[fail(display="the path '{}' is missing a ':key' component", path)]
+    MissingKeyInPath {
+        /// The invalid path.
+        path: String,
+    },
+
+    /// Secret does not have value for specified key.
+    #[fail(display="the secret '{}' does not have a value for the key '{}'", secret, key)]
+    MissingKeyInSecret {
+        /// The name of the secret.
+        secret: String,
+        /// The key for which we have no value.
+        key: String,
+    },
+
+    /// `VAULT_ADDR` not specified.
+    #[fail(display="VAULT_ADDR not specified")]
+    MissingVaultAddr,
+
+    /// Cannot get either `VAULT_TOKEN` or `~/.vault_token`.
+    #[fail(display="cannot get either VAULT_TOKEN or ~/.vault_token: {}", _0)]
+    MissingVaultToken(Box<Error>),
+
+    /// No `credentials` backend available.
+    #[fail(display="no credentials backend available")]
+    NoBackend,
+
+    /// Can't find home directory.
+    #[fail(display="can't find home directory")]
+    NoHomeDirectory,
+
+    /// Path cannot be represented as Unicode.
+    #[fail(display="path '{:?}' cannot be represented as Unicode", path)]
+    NonUnicodePath {
+        /// The path which cannot be represented as Unicode.
+        path: PathBuf,
+    },
+
+    /// Parsing error.
+    #[fail(display="could not parse {:?}", input)]
+    Parse {
+        /// The input we couldn't parse.
+        input: String,
+    },
+
+    /// An unspecified kind of error occurred.
+    #[fail(display="{}", _0)]
+    Other(failure::Error),
+
+    /// Can't read `Secretfile`.
+    #[fail(display="can't read Secretfile: {}", _0)]
+    Secretfile(Box<Error>),
+
+    /// Undefined environment variable.
+    #[fail(display="undefined environment variable {:?}: {}", name, cause)]
+    UndefinedEnvironmentVariable {
+        /// The name of the environment variable.
+        name: String,
+        /// The error we encountered.
+        #[cause] cause: env::VarError,
+    },
+
+    /// Unexpected HTTP status.
+    #[fail(display="unexpected HTTP status: {}", status)]
+    UnexpectedHttpStatus {
+        /// The status we received.
+        status: reqwest::StatusCode,
+    },
+
+    /// We failed to parse a URL.
+    #[fail(display="could not parse URL: {}", _0)]
+    UnparseableUrl(#[cause] reqwest::UrlError),
+
+    /// Could not access URL.
+    #[fail(display="could not access URL '{}': {}", url, cause)]
+    Url {
+        /// The URL we couldn't access.
+        url: reqwest::Url,
+        /// The reason we couldn't access it.
+        cause: Box<Error>,
+    },
+
+    /// We reserve the right to add new errors to this `enum` without
+    /// considering it a breaking API chance.
+    #[doc(hidden)]
+    #[fail(display="this error should never occur (nonexclusive)")]
+    __Nonexclusive,
+}
+
+impl From<failure::Error> for Error {
+    fn from(err: failure::Error) -> Self {
+        Error::Other(err)
     }
+}
 
-    errors {
-        Credential(name: String) {
-            description("can't access secure credential")
-            display("can't access secure credential '{}'", &name)
-        }
-        FileRead(path: PathBuf) {
-            description("problem reading file")
-            display("problem reading file '{}'", path.display())
-        }
-        InvalidUrl(url: String) {
-            description("invalid URL")
-            display("invalid URL '{}'", &url)
-        }
-        MissingEntry(name: String) {
-            description("missing entry in Secretfile")
-            display("no entry for '{}' in Secretfile", &name)
-        }
-        MissingKeyInPath(path: String) {
-            description("path is missing a ':key' component")
-            display("the path '{}' is missing a ':key' component", &path)
-        }
-        MissingKeyInSecret(secret: String, key: String) {
-            description("secret does not have value for specified key")
-            display("the secret '{}' does not have a value for the key '{}'",
-                    &secret, &key)
-        }
-        MissingVaultAddr {
-            description("VAULT_ADDR not specified")
-            display("VAULT_ADDR not specified")
-        }
-        MissingVaultToken {
-            description("cannot get either VAULT_TOKEN or ~/.vault_token")
-            display("cannot get either VAULT_TOKEN or ~/.vault_token")
-        }
-        NoBackend {
-            description("no credentials backend available")
-            display("no credentials backend available")
-        }
-        NoHomeDirectory {
-            description("can't find home directory")
-            display("can't find home directory")
-        }
-        NonUnicodePath(path: PathBuf) {
-            description("path cannot be represented as Unicode")
-            display("path '{}' cannot be represented as Unicode", path.display())
-        }
-        Parse(input: String) {
-            description("parsing error")
-            display("could not parse '{}'", &input)
-        }
-        Secretfile {
-            description("can't read Secretfile")
-            display("can't read Secretfile")
-        }
-        UndefinedEnvironmentVariable(name: String) {
-            description("undefined environment variable")
-            display("undefined environment variable '{}'", &name)
-        }
-        UnexpectedHttpStatus(status: reqwest::StatusCode) {
-            description("unexpected HTTP status")
-            display("unexpected HTTP status: {}", &status)
-        }
-        Url(url: reqwest::Url) {
-            description("could not access URL")
-            display("could not access URL '{}'", &url)
-        }
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Self {
+        Error::Io(err)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Error::Json(err)
+    }
+}
+
+impl From<reqwest::UrlError> for Error {
+    fn from(err: reqwest::UrlError) -> Self {
+        Error::UnparseableUrl(err)
     }
 }

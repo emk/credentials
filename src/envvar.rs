@@ -23,9 +23,12 @@ impl Backend for Client {
     }
 
     fn var(&mut self, _secretfile: &Secretfile, credential: &str) -> Result<String> {
-        let value = env::var(credential).chain_err(|| {
-                ErrorKind::UndefinedEnvironmentVariable(credential.to_owned())
-            })?;
+        let value = env::var(credential).map_err(|err| {
+            Error::UndefinedEnvironmentVariable {
+                name: credential.to_owned(),
+                cause: err,
+            }
+        })?;
         debug!("Found credential {} in environment", credential);
         Ok(value)
     }

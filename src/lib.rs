@@ -13,13 +13,10 @@
 
 #![warn(missing_docs)]
 
-// Needed for error-chain.
-#![recursion_limit = "1024"]
-
 // We need hyper just for the `header!` macro, at least until reqwest
 // exports it.
 #[macro_use]
-extern crate error_chain;
+extern crate failure;
 #[macro_use]
 extern crate hyper;
 #[macro_use]
@@ -44,7 +41,7 @@ use std::sync::{Mutex, MutexGuard};
 // strictly necessary, because we don't want to stablize too much at this
 // point.
 pub use secretfile::{Secretfile, SecretfileKeys};
-pub use errors::{Error, ErrorKind, Result, ResultExt};
+pub use errors::{Error, Result};
 
 mod backend;
 mod chained;
@@ -132,29 +129,31 @@ impl Client {
         trace!("getting secure credential {}", name_ref);
         self.backend
             .var(&self.secretfile, name_ref)
-            .chain_err(|| ErrorKind::Credential(name_ref.to_owned()))
             .map_err(|err| {
-                error!("{}", &err);
-                err
+                Error::Credential {
+                    name: name_ref.to_owned(),
+                    cause: Box::new(err),
+                }
             })
     }
 
     /// Fetch the value of a file-style credential.
     pub fn file<S: AsRef<Path>>(&mut self, path: S) -> Result<String> {
         let path_ref = path.as_ref();
-        let path_str = path_ref.to_str()
-            .ok_or_else(|| {
-                let err: Error = ErrorKind::NonUnicodePath(path_ref.to_owned()).into();
-                err
-            })
-            .chain_err(|| ErrorKind::Credential(format!("{}", path_ref.display())))?;
+        let path_str = path_ref.to_str().ok_or_else(|| {
+            Error::Credential {
+                name: format!("{}", path_ref.display()),
+                cause: Box::new(Error::NonUnicodePath { path: path_ref.to_owned() }),
+            }
+        })?;
         trace!("getting secure credential {}", path_str);
         self.backend
             .file(&self.secretfile, path_str)
-            .chain_err(|| ErrorKind::Credential(path_str.to_owned()))
             .map_err(|err| {
-                error!("{}", &err);
-                err
+                Error::Credential {
+                    name: path_str.to_owned(),
+                    cause: Box::new(err),
+                }
             })
     }
 }

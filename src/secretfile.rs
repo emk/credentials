@@ -41,22 +41,25 @@ fn interpolate_env(text: &str) -> Result<String> {
 
     // Perform the replacement.  This is mostly error-handling logic,
     // because `replace_all` doesn't anticipate any errors.
-    let mut undefined_env_var = None;
+    let mut err = None;
     let result = RE.replace_all(text, |caps: &Captures| {
         let name = caps.name("name").or_else(|| caps.name("name2"))
             .unwrap()
             .as_str();
         match env::var(name) {
             Ok(s) => s.to_owned(),
-            Err(_) => {
-                undefined_env_var = Some(name.to_owned());
+            Err(env_err) => {
+                err = Some(Error::UndefinedEnvironmentVariable {
+                    name: name.to_owned(),
+                    cause: env_err,
+                });
                 "".to_owned()
             }
         }
     });
-    match undefined_env_var {
+    match err {
         None => Ok(result.into_owned()),
-        Some(var) => Err(ErrorKind::UndefinedEnvironmentVariable(var).into()),
+        Some(err) => Err(err),
     }
 }
 
@@ -85,7 +88,7 @@ impl Location {
             }
             (_, _) => {
                 let all = caps.get(0).unwrap().as_str().to_owned();
-                Err(ErrorKind::Parse(all).into())
+                Err(Error::Parse { input: all })
             }
         }
     }
@@ -145,7 +148,7 @@ impl Secretfile {
                 Some(_) => {
                     // Blank or comment
                 }
-                _ => return Err(ErrorKind::Parse(line.to_owned()).into()),
+                _ => return Err(Error::Parse { input: line.to_owned() }),
             }
         }
         Ok(sf)
@@ -153,7 +156,9 @@ impl Secretfile {
 
     /// Read in from an `io::Read` object.
     pub fn read(read: &mut io::Read) -> Result<Secretfile> {
-        Secretfile::read_internal(read).chain_err(|| ErrorKind::Secretfile)
+        Secretfile::read_internal(read).map_err(|err| {
+            Error::Secretfile(Box::new(err))
+        })
     }
 
     /// Read a `Secretfile` from a string.
@@ -165,9 +170,18 @@ impl Secretfile {
     /// Load the `Secretfile` at the specified path.
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile> {
         let path = path.as_ref();
-        let mkerr = || ErrorKind::FileRead(path.to_owned());
-        let mut file = File::open(path).chain_err(&mkerr)?;
-        Secretfile::read(&mut file).chain_err(&mkerr)
+        let mut file = File::open(path).map_err(|err| {
+            Error::FileRead {
+                path: path.to_owned(),
+                cause: Box::new(err.into()),
+            }
+        })?;
+        Secretfile::read(&mut file).map_err(|err| {
+            Error::FileRead {
+                path: path.to_owned(),
+                cause: Box::new(err),
+            }
+        })
     }
 
     /// Set a built-in `Secretfile`. This is intended for command-line
@@ -196,7 +210,9 @@ impl Secretfile {
         if let Some(built_in) = built_in_opt {
             Ok(built_in)
         } else {
-            let mut path = env::current_dir().chain_err(|| ErrorKind::Secretfile)?;
+            let mut path = env::current_dir().map_err(|err| {
+                Error::Secretfile(Box::new(err.into()))
+            })?;
             path.push("Secretfile");
             Secretfile::from_path(path)
         }

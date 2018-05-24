@@ -16,7 +16,7 @@ header! { (XVaultToken, "X-Vault-Token") => [String] }
 
 /// The default vault server address.
 fn default_addr() -> Result<String> {
-    env::var("VAULT_ADDR").map_err(|_| ErrorKind::MissingVaultAddr.into())
+    env::var("VAULT_ADDR").map_err(|_| Error::MissingVaultAddr)
 }
 
 /// The default vault token.
@@ -24,10 +24,7 @@ fn default_token() -> Result<String> {
     env::var("VAULT_TOKEN")
         .or_else(|_: env::VarError| -> Result<String> {
             // Build a path to ~/.vault-token.
-            let mut path = env::home_dir().ok_or_else(|| {
-                    let err: Error = ErrorKind::NoHomeDirectory.into();
-                    err
-                })?;
+            let mut path = env::home_dir().ok_or(Error::NoHomeDirectory)?;
             path.push(".vault-token");
 
             // Read the file.
@@ -36,7 +33,7 @@ fn default_token() -> Result<String> {
             f.read_to_string(&mut token)?;
             Ok(token)
         })
-        .chain_err(|| ErrorKind::MissingVaultToken)
+        .map_err(|err| Error::MissingVaultToken(Box::new(err)))
 }
 
 /// Secret data retrieved from Vault.  This has a bunch more fields, but
@@ -73,9 +70,8 @@ impl Client {
     /// the Ruby `vault` gem.
     pub fn default() -> Result<Client> {
         let client = reqwest::Client::new().map_err(|e| {
-                let err: Error = format!("{}", e).into();
-                err
-            })?;
+            Error::Other(format_err!("{}", e))
+        })?;
         Client::new(client, &default_addr()?, default_token()?)
     }
 
@@ -96,23 +92,24 @@ impl Client {
         let url = self.addr.join(&format!("v1/{}", path))?;
         debug!("Getting secret {}", url);
 
-        let mkerr = || ErrorKind::Url(url.clone());
+        let mkerr = |err| {
+            Error::Url { url: url.clone(), cause: Box::new(err) }
+        };
         let mut res = self.client.get(url.clone())
-            .chain_err(&mkerr)?
+            .map_err(|err| (&mkerr)(Error::Other(err.into())))?
             // Leaving the connection open will cause errors on reconnect
             // after inactivity.
             .header(Connection::close())
             .header(XVaultToken(self.token.clone()))
             .send()
-            .chain_err(&mkerr)?;
+            .map_err(|err| (&mkerr)(Error::Other(err.into())))?;
 
         // Generate informative errors for HTTP failures, because these can
         // be caused by everything from bad URLs to overly restrictive
         // vault policies.
         if !res.status().is_success() {
             let status = res.status().to_owned();
-            let err: Error = ErrorKind::UnexpectedHttpStatus(status).into();
-            return Err(err).chain_err(&mkerr);
+            return Err(mkerr(Error::UnexpectedHttpStatus { status: status }))
         }
 
         let mut body = String::new();
@@ -125,7 +122,7 @@ impl Client {
                loc: Option<Location>)
                -> Result<String> {
         match loc {
-            None => Err(ErrorKind::MissingEntry(searched_for.to_owned()).into()),
+            None => Err(Error::MissingEntry { name: searched_for.to_owned() }),
             Some(Location::PathWithKey(ref path, ref key)) => {
                 // If we haven't cached this secret, do so.  This is
                 // necessary to correctly support dynamic credentials,
@@ -145,16 +142,15 @@ impl Client {
                 secret.data
                     .get(key)
                     .ok_or_else(|| {
-                        let err: Error =
-                            ErrorKind::MissingKeyInSecret(path.to_owned(),
-                                                          key.to_owned())
-                                .into();
-                        err
+                        Error::MissingKeyInSecret {
+                            secret: path.to_owned(),
+                            key: key.to_owned(),
+                        }
                     })
                     .map(|v| v.clone())
             }
             Some(Location::Path(ref path)) => {
-                Err(ErrorKind::MissingKeyInPath(path.to_owned()).into())
+                Err(Error::MissingKeyInPath { path: path.to_owned() })
             }
         }
     }

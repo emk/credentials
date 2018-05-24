@@ -60,7 +60,7 @@ impl Backend for Client {
                 }
             }
         }
-        Err(err.unwrap_or_else(|| ErrorKind::NoBackend.into()))
+        Err(err.unwrap_or(Error::NoBackend))
     }
 
     fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String> {
@@ -76,7 +76,7 @@ impl Backend for Client {
                 }
             }
         }
-        Err(err.unwrap_or_else(|| ErrorKind::NoBackend.into()))
+        Err(err.unwrap_or(Error::NoBackend))
     }
 }
 
@@ -109,7 +109,7 @@ mod tests {
             if credential == "DUMMY" {
                 Ok("dummy".to_owned())
             } else {
-                Err("Credential not supported".into())
+                Err(format_err!("Credential not supported").into())
             }
         }
 
@@ -117,7 +117,7 @@ mod tests {
             if path == "dummy.txt" {
                 Ok("dummy2".to_owned())
             } else {
-                Err("Credential not supported".into())
+                Err(format_err!("Credential not supported").into())
             }
         }
     }

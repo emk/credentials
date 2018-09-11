@@ -13,10 +13,9 @@
 
 #![warn(missing_docs)]
 
-// We need hyper just for the `header!` macro, at least until reqwest
-// exports it.
 #[macro_use]
 extern crate failure;
+// We need hyper just for the `header!` macro, which will go away in the future.
 #[macro_use]
 extern crate hyper;
 #[macro_use]

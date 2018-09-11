@@ -69,8 +69,7 @@ impl Client {
     /// environment variables and files used by the `vault` CLI tool and
     /// the Ruby `vault` gem.
     pub fn default() -> Result<Client> {
-        let client =
-            reqwest::Client::new().map_err(|e| Error::Other(format_err!("{}", e)))?;
+        let client = reqwest::Client::new();
         Client::new(client, &default_addr()?, default_token()?)
     }
 
@@ -97,7 +96,6 @@ impl Client {
             cause: Box::new(err),
         };
         let mut res = self.client.get(url.clone())
-            .map_err(|err| (&mkerr)(Error::Other(err.into())))?
             // Leaving the connection open will cause errors on reconnect
             // after inactivity.
             .header(Connection::close())

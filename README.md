@@ -67,6 +67,16 @@ credentials::var("PG_USERNAME").unwrap();
 credentials::var("PG_PASSWORD").unwrap();
 ```
 
+## Kubernetes integration
+
+We also support [Vault's Kubernetes Auth Method][kubernetes-auth]. To use this, you need to set the following environment variables:
+
+- `VAULT_ADDR`: The URL of the Vault server.
+- `VAULT_KUBERNETES_AUTH_PATH`: The Vault path at which the Kubernetes auth method was mounted (defaults to `"kubernetes"`). This allows you to support more than one Kubernetes cluster using a single Vault server.
+- `VAULT_KUBERNETES_ROLE`: The name of the Vault Kubernetes role, as configured under `/auth/kubernetes/role` in Vault.
+
+For an example of how to set up Vault Kubernetes auth using OpenShift, see [this article][openshift-example].
+
 ## Example code
 
 See [the `examples` directory](/examples) for complete, working code.
@@ -87,3 +97,5 @@ GitHub pull request.
 [12factor]: http://12factor.net/
 [vault]: https://www.vaultproject.io/
 [keywhiz]: https://square.github.io/keywhiz/
+[kubernetes-auth]: https://www.vaultproject.io/docs/auth/kubernetes.html
+[openshift-example]: https://blog.openshift.com/vault-integration-using-kubernetes-authentication-method/

@@ -76,7 +76,7 @@ pub enum Error {
     MissingVaultAddr,
 
     /// Cannot get either `VAULT_TOKEN` or `~/.vault_token`.
-    #[fail(display = "cannot get either VAULT_TOKEN or ~/.vault_token: {}", _0)]
+    #[fail(display = "cannot get VAULT_TOKEN, Kubernetes Vault token or ~/.vault_token: {}", _0)]
     MissingVaultToken(Box<Error>),
 
     /// No `credentials` backend available.
@@ -120,10 +120,12 @@ pub enum Error {
     },
 
     /// Unexpected HTTP status.
-    #[fail(display = "unexpected HTTP status: {}", status)]
+    #[fail(display = "unexpected HTTP status: {} ({})", status, body)]
     UnexpectedHttpStatus {
         /// The status we received.
         status: reqwest::StatusCode,
+        /// The HTTP body we received.
+        body: String,
     },
 
     /// We failed to parse a URL.

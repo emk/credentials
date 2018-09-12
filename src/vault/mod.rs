@@ -11,6 +11,10 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 
+mod kubernetes;
+
+use self::kubernetes::vault_kubernetes_token;
+
 // Define our custom vault token header for use with reqwest.
 header! { (XVaultToken, "X-Vault-Token") => [String] }
 
@@ -20,9 +24,18 @@ fn default_addr() -> Result<String> {
 }
 
 /// The default vault token.
-fn default_token() -> Result<String> {
-    env::var("VAULT_TOKEN")
-        .or_else(|_: env::VarError| -> Result<String> {
+fn default_token(addr: &reqwest::Url) -> Result<String> {
+    // Wrap everything in a local function and call it so that
+    // we can wrap all errors in a custom type.
+    (|| -> Result<String> {
+        if let Ok(token) = env::var("VAULT_TOKEN") {
+            // The env var `VAULT_TOKEN` overrides everything.
+            Ok(token)
+        } else if let Some(token) = vault_kubernetes_token(addr)? {
+            // We were able to get a token using our Kubernetes JWT
+            // token.
+            Ok(token)
+        } else {
             // Build a path to ~/.vault-token.
             let mut path = env::home_dir().ok_or(Error::NoHomeDirectory)?;
             path.push(".vault-token");
@@ -32,8 +45,8 @@ fn default_token() -> Result<String> {
             let mut token = String::new();
             f.read_to_string(&mut token)?;
             Ok(token)
-        })
-        .map_err(|err| Error::MissingVaultToken(Box::new(err)))
+        }
+    })().map_err(|err| Error::MissingVaultToken(Box::new(err)))
 }
 
 /// Secret data retrieved from Vault.  This has a bunch more fields, but
@@ -70,9 +83,12 @@ impl Client {
     /// the Ruby `vault` gem.
     pub fn default() -> Result<Client> {
         let client = reqwest::Client::new();
-        Client::new(client, &default_addr()?, default_token()?)
+        let addr = default_addr()?.parse()?;
+        let token = default_token(&addr)?;
+        Client::new(client, addr, token)
     }
 
+    /// Create a new Vault client.
     fn new<U, S>(client: reqwest::Client, addr: U, token: S) -> Result<Client>
     where
         U: reqwest::IntoUrl,
@@ -87,6 +103,7 @@ impl Client {
         })
     }
 
+    /// Fetch a secret from the Vault server.
     fn get_secret(&self, path: &str) -> Result<Secret> {
         let url = self.addr.join(&format!("v1/{}", path))?;
         debug!("Getting secret {}", url);
@@ -103,17 +120,22 @@ impl Client {
             .send()
             .map_err(|err| (&mkerr)(Error::Other(err.into())))?;
 
-        // Generate informative errors for HTTP failures, because these can
-        // be caused by everything from bad URLs to overly restrictive
-        // vault policies.
-        if !res.status().is_success() {
-            let status = res.status().to_owned();
-            return Err(mkerr(Error::UnexpectedHttpStatus { status: status }));
-        }
-
+        // Read our HTTP body.
         let mut body = String::new();
         res.read_to_string(&mut body)?;
-        Ok(serde_json::from_str(&body)?)
+
+        if res.status().is_success() {
+            Ok(serde_json::from_str(&body)?)
+        } else {
+            // Generate informative errors for HTTP failures, because these can
+            // be caused by everything from bad URLs to overly restrictive vault
+            // policies.
+            let status = res.status().to_owned();
+            Err(mkerr(Error::UnexpectedHttpStatus {
+                status,
+                body: body.trim().to_owned(),
+            }))
+        }
     }
 
     fn get_loc(

@@ -14,6 +14,7 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::iter::Iterator;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Mutex;
 
 use crate::errors::*;
@@ -170,12 +171,6 @@ impl Secretfile {
         Secretfile::read_internal(read).map_err(|err| Error::Secretfile(Box::new(err)))
     }
 
-    /// Read a `Secretfile` from a string.
-    pub fn from_str<S: AsRef<str>>(s: S) -> Result<Secretfile> {
-        let mut cursor = io::Cursor::new(s.as_ref().as_bytes());
-        Secretfile::read(&mut cursor)
-    }
-
     /// Load the `Secretfile` at the specified path.
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Secretfile> {
         let path = path.as_ref();
@@ -238,6 +233,15 @@ impl Secretfile {
     }
 }
 
+impl FromStr for Secretfile {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Secretfile> {
+        let mut cursor = io::Cursor::new(s.as_bytes());
+        Secretfile::read(&mut cursor)
+    }
+}
+
 /// Internal methods for looking up `Location`s in `Secretfile`.  These are
 /// hidden in a separate trait so that we can export them _within_ this
 /// crate, but not expose them to other crates.
@@ -280,6 +284,8 @@ impl<'a> Iterator for SecretfileKeys<'a> {
 
 #[test]
 fn test_parse() {
+    use std::str::FromStr;
+
     let data = "\
 # This is a comment.
 

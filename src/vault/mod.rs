@@ -95,10 +95,9 @@ impl Client {
         U: Into<Url>,
         S: Into<String>,
     {
-        let addr = addr.into();
         Ok(Client {
-            client: client,
-            addr: addr,
+            client,
+            addr: addr.into(),
             token: token.into(),
             secrets: BTreeMap::new(),
         })
@@ -161,9 +160,9 @@ impl Client {
                     self.secrets.insert(path.to_owned(), secret);
                 }
 
-                // Get the secret from our cache.  `unwrap` is safe here,
+                // Get the secret from our cache.  `[]]` is safe here,
                 // because if we didn't have it, we grabbed it above.
-                let secret = self.secrets.get(path).unwrap();
+                let secret = &self.secrets[path];
 
                 // Look up the specified key in our secret's data bag.
                 secret

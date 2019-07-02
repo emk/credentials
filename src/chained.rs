@@ -86,6 +86,7 @@ impl Backend for Client {
 mod tests {
     use failure::format_err;
     use std::env;
+    use std::str::FromStr;
 
     use super::Client;
     use crate::backend::Backend;

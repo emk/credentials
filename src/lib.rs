@@ -12,6 +12,7 @@
 //! ```
 
 #![warn(missing_docs)]
+#![allow(clippy::redundant_closure)]
 
 use backend::Backend;
 use lazy_static::lazy_static;
@@ -88,7 +89,7 @@ impl Client {
         };
         let over = options.allow_override;
         Ok(Client {
-            secretfile: secretfile,
+            secretfile,
             backend: chained::Client::with_default_backends(over)?,
         })
     }
@@ -156,6 +157,7 @@ lazy_static! {
 
 /// Call `body` with the default global client, or return an error if we
 /// can't allocate a default global client.
+#[allow(clippy::let_and_return)] // See `result`.
 fn with_client<F>(body: F) -> Result<String>
 where
     F: FnOnce(&mut Client) -> Result<String>,
@@ -171,10 +173,10 @@ where
     // for mysterious reasons related to the borrow checker and global
     // mutable state.
     let result = match client_cell.borrow_mut().deref_mut() {
-        &mut Some(ref mut client) => body(client),
+        Some(client) => body(client),
         // We theoretically handed this just above, and exited if we
         // failed.
-        &mut None => panic!("Should have a client, but we don't"),
+        None => panic!("Should have a client, but we don't"),
     };
     result
 }

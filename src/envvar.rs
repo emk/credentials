@@ -46,6 +46,7 @@ impl Backend for Client {
 
 #[test]
 fn test_var() {
+    use std::str::FromStr;
     let sf = Secretfile::from_str("").unwrap();
     let mut client = Client::default().unwrap();
     env::set_var("FOO_USERNAME", "user");
@@ -55,6 +56,7 @@ fn test_var() {
 
 #[test]
 fn test_file() {
+    use std::str::FromStr;
     let sf = Secretfile::from_str("").unwrap();
     let mut client = Client::default().unwrap();
 

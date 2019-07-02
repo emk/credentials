@@ -16,11 +16,10 @@ const KUBERNETES_TOKEN_PATH: &str =
 
 /// Fetch the JWT token associated with the current Kubernetes service account.
 fn kubernetes_jwt() -> Result<String> {
-    fs::read_to_string(KUBERNETES_TOKEN_PATH)
-        .map_err(|err| Error::FileRead {
-            path: Path::new(KUBERNETES_TOKEN_PATH).to_owned(),
-            cause: Box::new(err.into()),
-        })
+    fs::read_to_string(KUBERNETES_TOKEN_PATH).map_err(|err| Error::FileRead {
+        path: Path::new(KUBERNETES_TOKEN_PATH).to_owned(),
+        cause: Box::new(err.into()),
+    })
 }
 
 /// Vault login information for a Kubernetes-based service login.
@@ -58,7 +57,8 @@ fn auth(
         url: url.to_owned(),
         cause: Box::new(err),
     };
-    let mut res = client.post(url.clone())
+    let mut res = client
+        .post(url.clone())
         // Leaving the connection open will cause errors on reconnect
         // after inactivity.
         //
@@ -93,9 +93,8 @@ pub(crate) fn vault_kubernetes_token(addr: &reqwest::Url) -> Result<Option<Strin
         Ok(role) => role,
         Err(_) => return Ok(None),
     };
-    let auth_path = env::var("VAULT_KUBERNETES_AUTH_PATH").unwrap_or_else(|_| {
-        "kubernetes".to_owned()
-    });
+    let auth_path = env::var("VAULT_KUBERNETES_AUTH_PATH")
+        .unwrap_or_else(|_| "kubernetes".to_owned());
     let jwt = kubernetes_jwt()?;
     let client = reqwest::Client::new();
     Ok(Some(auth(client, addr, &auth_path, &role, &jwt)?))

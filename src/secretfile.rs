@@ -39,14 +39,16 @@ fn interpolate_env(text: &str) -> Result<String> {
   |
     \{(?P<name2>[a-zA-Z_][a-zA-Z0-9_]*)\}
   )"
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     // Perform the replacement.  This is mostly error-handling logic,
     // because `replace_all` doesn't anticipate any errors.
     let mut err = None;
     let result = RE.replace_all(text, |caps: &Captures| {
-        let name = caps.name("name")
+        let name = caps
+            .name("name")
             .or_else(|| caps.name("name2"))
             .unwrap()
             .as_str();

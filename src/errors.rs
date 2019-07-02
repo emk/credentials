@@ -62,8 +62,10 @@ pub enum Error {
     },
 
     /// Secret does not have value for specified key.
-    #[fail(display = "the secret '{}' does not have a value for the key '{}'",
-           secret, key)]
+    #[fail(
+        display = "the secret '{}' does not have a value for the key '{}'",
+        secret, key
+    )]
     MissingKeyInSecret {
         /// The name of the secret.
         secret: String,
@@ -76,7 +78,10 @@ pub enum Error {
     MissingVaultAddr,
 
     /// Cannot get either `VAULT_TOKEN` or `~/.vault_token`.
-    #[fail(display = "cannot get VAULT_TOKEN, Kubernetes Vault token or ~/.vault_token: {}", _0)]
+    #[fail(
+        display = "cannot get VAULT_TOKEN, Kubernetes Vault token or ~/.vault_token: {}",
+        _0
+    )]
     MissingVaultToken(Box<Error>),
 
     /// No `credentials` backend available.

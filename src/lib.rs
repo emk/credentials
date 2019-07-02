@@ -13,7 +13,6 @@
 
 #![warn(missing_docs)]
 
-
 use backend::Backend;
 use lazy_static::lazy_static;
 use log::trace;

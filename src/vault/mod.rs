@@ -46,7 +46,8 @@ fn default_token(addr: &reqwest::Url) -> Result<String> {
             f.read_to_string(&mut token)?;
             Ok(token)
         }
-    })().map_err(|err| Error::MissingVaultToken(Box::new(err)))
+    })()
+    .map_err(|err| Error::MissingVaultToken(Box::new(err)))
 }
 
 /// Secret data retrieved from Vault.  This has a bunch more fields, but
@@ -112,7 +113,9 @@ impl Client {
             url: url.clone(),
             cause: Box::new(err),
         };
-        let mut res = self.client.get(url.clone())
+        let mut res = self
+            .client
+            .get(url.clone())
             // Leaving the connection open will cause errors on reconnect
             // after inactivity.
             .header("Connection", "close")

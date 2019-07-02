@@ -5,7 +5,7 @@
 //! keys: from `MY_SECRET_PASSWORD` to the path `secret/my_secret` and the
 //! key `"password"`.
 
-use errors::*;
+use lazy_static::lazy_static;
 use regex::{Captures, Regex};
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap};
@@ -15,6 +15,8 @@ use std::io::{self, BufRead};
 use std::iter::Iterator;
 use std::path::Path;
 use std::sync::Mutex;
+
+use crate::errors::*;
 
 lazy_static! {
     // For command-line binaries used directly by users, it may occasionally be

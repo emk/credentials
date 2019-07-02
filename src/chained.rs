@@ -1,10 +1,12 @@
 //! Backend which tries multiple other backends, in sequence.
 
-use backend::Backend;
-use envvar;
-use errors::*;
-use secretfile::Secretfile;
-use vault;
+use log::debug;
+
+use crate::backend::Backend;
+use crate::envvar;
+use crate::errors::*;
+use crate::secretfile::Secretfile;
+use crate::vault;
 
 /// Fetches credentials from various other backends, based on which ones
 /// we've been configured to use.
@@ -82,12 +84,14 @@ impl Backend for Client {
 
 #[cfg(test)]
 mod tests {
-    use super::Client;
-    use backend::Backend;
-    use envvar;
-    use errors::*;
-    use secretfile::Secretfile;
+    use failure::format_err;
     use std::env;
+
+    use super::Client;
+    use crate::backend::Backend;
+    use crate::envvar;
+    use crate::errors::*;
+    use crate::secretfile::Secretfile;
 
     struct DummyClient;
 

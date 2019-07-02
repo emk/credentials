@@ -1,11 +1,13 @@
 //! A backend which reads from environment variables.
 
-use backend::Backend;
-use errors::*;
-use secretfile::Secretfile;
+use log::debug;
 use std::env;
 use std::fs;
 use std::io::Read;
+
+use crate::backend::Backend;
+use crate::errors::*;
+use crate::secretfile::Secretfile;
 
 /// Fetches credentials from environment variables.
 pub struct Client;

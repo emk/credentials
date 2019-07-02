@@ -1,11 +1,12 @@
-use errors::*;
 use reqwest;
-use reqwest::header::Connection;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use std::env;
 use std::fs;
 use std::io::prelude::*;
 use std::path::Path;
+
+use crate::errors::*;
 
 /// Path to a Kubernetes service account API token (automatically mounted into
 /// the container if one is available and `automountServiceAccountToken` is not
@@ -62,7 +63,7 @@ fn auth(
         // after inactivity.
         //
         // TODO: Is this still true?
-        .header(Connection::close())
+        .header("Connection", "close")
         .body(serde_json::to_vec(&payload)?)
         .send()
         .map_err(|err| (&mkerr)(Error::Other(err.into())))?;

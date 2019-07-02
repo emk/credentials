@@ -13,22 +13,10 @@
 
 #![warn(missing_docs)]
 
-#[macro_use]
-extern crate failure;
-// We need hyper just for the `header!` macro, which will go away in the future.
-#[macro_use]
-extern crate hyper;
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate log;
-extern crate regex;
-extern crate reqwest;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
 
 use backend::Backend;
+use lazy_static::lazy_static;
+use log::trace;
 use std::cell::RefCell;
 use std::convert::AsRef;
 use std::default::Default;

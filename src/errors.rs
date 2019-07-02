@@ -1,6 +1,6 @@
 //! Various error types used internally, and in our public APIs.
 
-use failure;
+use failure::{self, Fail};
 use reqwest;
 use serde_json;
 use std::env;

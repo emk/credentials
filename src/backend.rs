@@ -1,7 +1,7 @@
 //! Generic interface to secret storage backends.
 
-use errors::*;
-use secretfile::Secretfile;
+use crate::errors::*;
+use crate::secretfile::Secretfile;
 
 /// Generic interface to a secret-storage backend.
 pub trait Backend: Send + Sync {

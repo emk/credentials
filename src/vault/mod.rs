@@ -1,22 +1,22 @@
 //! A very basic client for Hashicorp's Vault
 
-use backend::Backend;
-use errors::*;
-use reqwest;
-use reqwest::header::Connection;
-use secretfile::{Location, Secretfile, SecretfileLookup};
+use dirs;
+use log::debug;
+use reqwest::{self, Url};
+use serde::Deserialize;
 use serde_json;
 use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
 use std::io::Read;
 
+use crate::backend::Backend;
+use crate::errors::*;
+use crate::secretfile::{Location, Secretfile, SecretfileLookup};
+
 mod kubernetes;
 
 use self::kubernetes::vault_kubernetes_token;
-
-// Define our custom vault token header for use with reqwest.
-header! { (XVaultToken, "X-Vault-Token") => [String] }
 
 /// The default vault server address.
 fn default_addr() -> Result<String> {
@@ -37,7 +37,7 @@ fn default_token(addr: &reqwest::Url) -> Result<String> {
             Ok(token)
         } else {
             // Build a path to ~/.vault-token.
-            let mut path = env::home_dir().ok_or(Error::NoHomeDirectory)?;
+            let mut path = dirs::home_dir().ok_or(Error::NoHomeDirectory)?;
             path.push(".vault-token");
 
             // Read the file.
@@ -91,10 +91,10 @@ impl Client {
     /// Create a new Vault client.
     fn new<U, S>(client: reqwest::Client, addr: U, token: S) -> Result<Client>
     where
-        U: reqwest::IntoUrl,
+        U: Into<Url>,
         S: Into<String>,
     {
-        let addr = addr.into_url()?;
+        let addr = addr.into();
         Ok(Client {
             client: client,
             addr: addr,
@@ -115,8 +115,8 @@ impl Client {
         let mut res = self.client.get(url.clone())
             // Leaving the connection open will cause errors on reconnect
             // after inactivity.
-            .header(Connection::close())
-            .header(XVaultToken(self.token.clone()))
+            .header("Connection", "close")
+            .header("X-Vault-Token", &self.token[..])
             .send()
             .map_err(|err| (&mkerr)(Error::Other(err.into())))?;
 

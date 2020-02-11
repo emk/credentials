@@ -7,6 +7,7 @@ use std::env;
 use std::io;
 use std::path::PathBuf;
 use std::result;
+use url;
 
 /// A result returned by functions in `Credentials`.
 pub type Result<T> = result::Result<T, Error>;
@@ -135,7 +136,7 @@ pub enum Error {
 
     /// We failed to parse a URL.
     #[fail(display = "could not parse URL: {}", _0)]
-    UnparseableUrl(#[cause] reqwest::UrlError),
+    UnparseableUrl(#[cause] url::ParseError),
 
     /// Could not access URL.
     #[fail(display = "could not access URL '{}': {}", url, cause)]
@@ -171,8 +172,8 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<reqwest::UrlError> for Error {
-    fn from(err: reqwest::UrlError) -> Self {
+impl From<url::ParseError> for Error {
+    fn from(err: url::ParseError) -> Self {
         Error::UnparseableUrl(err)
     }
 }

@@ -64,7 +64,7 @@ struct Secret {
 /// A basic Vault client.
 pub struct Client {
     /// Our HTTP client.  This can be configured to mock out the network.
-    client: reqwest::Client,
+    client: reqwest::blocking::Client,
     /// The address of our Vault server.
     addr: reqwest::Url,
     /// The token which we'll use to access Vault.
@@ -83,14 +83,14 @@ impl Client {
     /// environment variables and files used by the `vault` CLI tool and
     /// the Ruby `vault` gem.
     pub fn default() -> Result<Client> {
-        let client = reqwest::Client::new();
+        let client = reqwest::blocking::Client::new();
         let addr = default_addr()?.parse()?;
         let token = default_token(&addr)?;
         Client::new(client, addr, token)
     }
 
     /// Create a new Vault client.
-    fn new<U, S>(client: reqwest::Client, addr: U, token: S) -> Result<Client>
+    fn new<U, S>(client: reqwest::blocking::Client, addr: U, token: S) -> Result<Client>
     where
         U: Into<Url>,
         S: Into<String>,

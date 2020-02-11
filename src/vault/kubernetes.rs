@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::env;
 use std::fs;
-use std::io::prelude::*;
+use std::io::Read;
 use std::path::Path;
 
 use crate::errors::*;
@@ -45,7 +45,7 @@ struct VaultAuth {
 
 /// Authenticate against the specified Kubernetes auth endpoint.
 fn auth(
-    client: reqwest::Client,
+    client: reqwest::blocking::Client,
     addr: &reqwest::Url,
     auth_path: &str,
     role: &str,
@@ -96,6 +96,6 @@ pub(crate) fn vault_kubernetes_token(addr: &reqwest::Url) -> Result<Option<Strin
     let auth_path = env::var("VAULT_KUBERNETES_AUTH_PATH")
         .unwrap_or_else(|_| "kubernetes".to_owned());
     let jwt = kubernetes_jwt()?;
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     Ok(Some(auth(client, addr, &auth_path, &role, &jwt)?))
 }

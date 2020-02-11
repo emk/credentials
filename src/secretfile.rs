@@ -111,7 +111,7 @@ pub struct Secretfile {
 }
 
 impl Secretfile {
-    fn read_internal(read: &mut io::Read) -> Result<Secretfile> {
+    fn read_internal(read: &mut dyn io::Read) -> Result<Secretfile> {
         // Only compile this Regex once.
         lazy_static! {
             // Match an individual line in a Secretfile.
@@ -167,7 +167,7 @@ impl Secretfile {
     }
 
     /// Read in from an `io::Read` object.
-    pub fn read(read: &mut io::Read) -> Result<Secretfile> {
+    pub fn read(read: &mut dyn io::Read) -> Result<Secretfile> {
         Secretfile::read_internal(read).map_err(|err| Error::Secretfile(Box::new(err)))
     }
 

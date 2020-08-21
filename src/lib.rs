@@ -162,7 +162,7 @@ fn with_client<F>(body: F) -> Result<String>
 where
     F: FnOnce(&mut Client) -> Result<String>,
 {
-    let client_cell: MutexGuard<_> = CLIENT.lock().unwrap();
+    let client_cell: MutexGuard<'_, _> = CLIENT.lock().unwrap();
 
     // Try to set up the client if we haven't already.
     if client_cell.borrow().is_none() {

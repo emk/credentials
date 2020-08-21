@@ -47,7 +47,7 @@ fn interpolate_env(text: &str) -> Result<String> {
     // Perform the replacement.  This is mostly error-handling logic,
     // because `replace_all` doesn't anticipate any errors.
     let mut err = None;
-    let result = RE.replace_all(text, |caps: &Captures| {
+    let result = RE.replace_all(text, |caps: &Captures<'_>| {
         let name = caps
             .name("name")
             .or_else(|| caps.name("name2"))
@@ -111,7 +111,7 @@ pub struct Secretfile {
 }
 
 impl Secretfile {
-    fn read_internal(read: &mut io::Read) -> Result<Secretfile> {
+    fn read_internal(read: &mut dyn io::Read) -> Result<Secretfile> {
         // Only compile this Regex once.
         lazy_static! {
             // Match an individual line in a Secretfile.
@@ -167,7 +167,7 @@ impl Secretfile {
     }
 
     /// Read in from an `io::Read` object.
-    pub fn read(read: &mut io::Read) -> Result<Secretfile> {
+    pub fn read(read: &mut dyn io::Read) -> Result<Secretfile> {
         Secretfile::read_internal(read).map_err(|err| Error::Secretfile(Box::new(err)))
     }
 
@@ -219,14 +219,14 @@ impl Secretfile {
 
     /// Return an iterator over the environment variables listed in this
     /// file.
-    pub fn vars(&self) -> SecretfileKeys {
+    pub fn vars(&self) -> SecretfileKeys<'_> {
         SecretfileKeys {
             keys: self.varmap.keys(),
         }
     }
 
     /// Return an iterator over the credential files listed in this file.
-    pub fn files(&self) -> SecretfileKeys {
+    pub fn files(&self) -> SecretfileKeys<'_> {
         SecretfileKeys {
             keys: self.filemap.keys(),
         }

@@ -11,7 +11,7 @@ use crate::vault;
 /// Fetches credentials from various other backends, based on which ones
 /// we've been configured to use.
 pub struct Client {
-    backends: Vec<Box<Backend>>,
+    backends: Vec<Box<dyn Backend>>,
 }
 
 impl Client {

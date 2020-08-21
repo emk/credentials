@@ -1,7 +1,7 @@
 //! Look and print the credentials specified on the command line.
 
-extern crate credentials;
-extern crate env_logger;
+use credentials;
+use env_logger;
 
 use std::env;
 use std::io::{self, Write};

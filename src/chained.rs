@@ -84,7 +84,6 @@ impl Backend for Client {
 
 #[cfg(test)]
 mod tests {
-    use failure::format_err;
     use std::env;
     use std::str::FromStr;
 
@@ -115,7 +114,7 @@ mod tests {
             if credential == "DUMMY" {
                 Ok("dummy".to_owned())
             } else {
-                Err(format_err!("Credential not supported").into())
+                Err(Error::Other("Credential not supported".into()))
             }
         }
 
@@ -123,7 +122,7 @@ mod tests {
             if path == "dummy.txt" {
                 Ok("dummy2".to_owned())
             } else {
-                Err(format_err!("Credential not supported").into())
+                Err(Error::Other("Credential not supported".into()))
             }
         }
     }

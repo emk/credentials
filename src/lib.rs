@@ -4,11 +4,14 @@
 //! homepage](https://github.com/emk/credentials).
 //!
 //! ```
-//! use credentials;
+//! # #[tokio::main]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
 //! use std::env;
 //!
 //! env::set_var("PASSWORD", "secret");
-//! assert_eq!("secret", credentials::var("PASSWORD").unwrap());
+//! assert_eq!("secret", credentials::var("PASSWORD").await?);
+//! # Ok(())
+//! # }
 //! ```
 
 #![warn(missing_docs)]
@@ -17,12 +20,13 @@
 use backend::Backend;
 use lazy_static::lazy_static;
 use log::trace;
-use std::cell::RefCell;
 use std::convert::AsRef;
 use std::default::Default;
-use std::ops::DerefMut;
+use std::future::Future;
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
+use std::pin::Pin;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 // Be very careful not to export any more of the Secretfile API than
 // strictly necessary, because we don't want to stablize too much at this
@@ -82,7 +86,7 @@ pub struct Client {
 
 impl Client {
     /// Create a new client using the specified options.
-    pub fn new(options: Options) -> Result<Client> {
+    pub async fn new(options: Options) -> Result<Client> {
         let secretfile = match options.secretfile {
             Some(sf) => sf,
             None => Secretfile::default()?,
@@ -90,18 +94,18 @@ impl Client {
         let over = options.allow_override;
         Ok(Client {
             secretfile,
-            backend: chained::Client::with_default_backends(over)?,
+            backend: chained::Client::with_default_backends(over).await?,
         })
     }
 
     /// Create a new client using the default options.
-    pub fn default() -> Result<Client> {
-        Client::new(Default::default())
+    pub async fn default() -> Result<Client> {
+        Client::new(Default::default()).await
     }
 
     /// Create a new client using the specified `Secretfile`.
-    pub fn with_secretfile(secretfile: Secretfile) -> Result<Client> {
-        Client::new(Options::default().secretfile(secretfile))
+    pub async fn with_secretfile(secretfile: Secretfile) -> Result<Client> {
+        Client::new(Options::default().secretfile(secretfile)).await
     }
 
     /// Provide access to a copy of the Secretfile we're using.
@@ -110,32 +114,34 @@ impl Client {
     }
 
     /// Fetch the value of an environment-variable-style credential.
-    pub fn var<S: AsRef<str>>(&mut self, name: S) -> Result<String> {
+    pub async fn var<S: AsRef<str>>(&mut self, name: S) -> Result<String> {
         let name_ref = name.as_ref();
         trace!("getting secure credential {}", name_ref);
         self.backend
             .var(&self.secretfile, name_ref)
+            .await
             .map_err(|err| Error::Credential {
                 name: name_ref.to_owned(),
-                cause: Box::new(err),
+                source: Box::new(err),
             })
     }
 
     /// Fetch the value of a file-style credential.
-    pub fn file<S: AsRef<Path>>(&mut self, path: S) -> Result<String> {
+    pub async fn file<S: AsRef<Path>>(&mut self, path: S) -> Result<String> {
         let path_ref = path.as_ref();
         let path_str = path_ref.to_str().ok_or_else(|| Error::Credential {
             name: format!("{}", path_ref.display()),
-            cause: Box::new(Error::NonUnicodePath {
+            source: Box::new(Error::NonUnicodePath {
                 path: path_ref.to_owned(),
             }),
         })?;
         trace!("getting secure credential {}", path_str);
         self.backend
             .file(&self.secretfile, path_str)
+            .await
             .map_err(|err| Error::Credential {
                 name: path_str.to_owned(),
-                cause: Box::new(err),
+                source: Box::new(err),
             })
     }
 }
@@ -151,44 +157,51 @@ lazy_static! {
     // mutable global that might be null? Have you really thought about
     // this?"  But the global default client is only for convenience, so
     // we're OK with it, at least so far.
-    static ref CLIENT: Mutex<RefCell<Option<Client>>> =
-        Mutex::new(RefCell::new(None));
+    static ref CLIENT: Arc<Mutex<Option<Client>>> =
+        Arc::new(Mutex::new(None));
 }
 
-/// Call `body` with the default global client, or return an error if we
-/// can't allocate a default global client.
-#[allow(clippy::let_and_return)] // See `result`.
-fn with_client<F>(body: F) -> Result<String>
+/// Call `body` with the default global client, or return an error if we can't
+/// allocate a default global client.
+///
+/// `F` has a rather horrible type constraint that allows it to hold onto a
+/// `&mut` pointing at the contents of `client_cell`. See
+/// https://users.rust-lang.org/t/function-that-takes-a-closure-with-mutable-reference-that-returns-a-future/54324.
+async fn with_client<F>(body: F) -> Result<String>
 where
-    F: FnOnce(&mut Client) -> Result<String>,
+    F: for<'a> FnOnce(
+        &'a mut Client,
+    )
+        -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>>,
 {
-    let client_cell: MutexGuard<'_, _> = CLIENT.lock().unwrap();
+    let mut client_cell = CLIENT.clone().lock_owned().await;
 
     // Try to set up the client if we haven't already.
-    if client_cell.borrow().is_none() {
-        *client_cell.borrow_mut() = Some(Client::default()?);
+    if client_cell.is_none() {
+        *client_cell = Some(Client::default().await?);
     }
 
     // Call the provided function.  I have to break out `result` separately
     // for mysterious reasons related to the borrow checker and global
     // mutable state.
-    let result = match client_cell.borrow_mut().deref_mut() {
-        Some(client) => body(client),
+    match client_cell.as_mut() {
+        Some(client) => body(client).await,
         // We theoretically handed this just above, and exited if we
         // failed.
         None => panic!("Should have a client, but we don't"),
-    };
-    result
+    }
 }
 
 /// Fetch the value of an environment-variable-style credential.
-pub fn var<S: AsRef<str>>(name: S) -> Result<String> {
-    with_client(|client| client.var(name))
+pub async fn var<S: AsRef<str>>(name: S) -> Result<String> {
+    let name = name.as_ref().to_owned();
+    with_client(|client| Box::pin(client.var(name))).await
 }
 
 /// Fetch the value of a file-style credential.
-pub fn file<S: AsRef<Path>>(path: S) -> Result<String> {
-    with_client(|client| client.file(path))
+pub async fn file<S: AsRef<Path>>(path: S) -> Result<String> {
+    let path = path.as_ref().to_owned();
+    with_client(|client| Box::pin(client.file(path))).await
 }
 
 #[cfg(test)]
@@ -196,15 +209,16 @@ mod test {
     use super::file;
     use std::fs;
     use std::io::Read;
+    use std::path::Path;
 
-    #[test]
-    fn test_file() {
+    #[tokio::test]
+    async fn test_file() {
         // Some arbitrary file contents.
         let mut f = fs::File::open("Cargo.toml").unwrap();
         let mut expected = String::new();
         f.read_to_string(&mut expected).unwrap();
 
-        assert_eq!(expected, file("Cargo.toml").unwrap());
-        assert!(file("nosuchfile.txt").is_err());
+        assert_eq!(expected, file(&Path::new("Cargo.toml")).await.unwrap());
+        assert!(file(&Path::new("nosuchfile.txt")).await.is_err());
     }
 }

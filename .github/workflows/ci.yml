@@ -1,0 +1,58 @@
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull
+# request events but only for the main branch.
+on:
+  push:
+    # Run on the main branch.
+    branches:
+      - main
+  pull_request:
+    # Only run on pull requests against main.
+    branches:
+      - main
+
+jobs:
+  # We use a matrix to run our build on every supported platform.
+  build:
+    name: "Test"
+
+    strategy:
+      matrix:
+        # host: Official name of system doing the compiling.
+        # os: GitHub CI OS image to use on runner.
+        include:
+          - os: ubuntu-latest
+            host: x86_64-unknown-linux-musl
+          - os: macos-latest
+            host: x86_64-apple-darwin
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          # We track latest stable Rust instead of hardcoding it because it
+          # virtually never breaks old code.
+          toolchain: stable
+          components: rustfmt, clippy
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+      - name: Check source formatting and warnings
+        run: |
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+      - name: Check policy
+        run: |
+          version=0.11.0
+          basename=cargo-deny-$version-${{ matrix.host }}
+          curl -fLO https://github.com/EmbarkStudios/cargo-deny/releases/download/$version/$basename.tar.gz
+          tar xf $basename.tar.gz
+          mv $basename/cargo-deny /usr/local/bin/
+          rm -rf $basename $basename.tar.gz
+          cargo deny check
+      - name: Test
+        run: |
+          cargo test

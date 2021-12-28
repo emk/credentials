@@ -7,11 +7,19 @@ copyleft = "deny"
 
 # Allow common non-restrictive licenses. ISC is used for various DNS and crypto
 # things, and it's a minimally restrictive open source license.
-allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "CC0-1.0", "Zlib"]
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "CC0-1.0", "ISC", "OpenSSL", "Zlib"]
 
 # Many organizations ban AGPL-licensed code
 # https://opensource.google/docs/using/agpl-policy/
 deny = ["AGPL-3.0"]
+
+[[licenses.clarify]]
+# Ring has a messy license.
+name = "ring"
+expression = "ISC AND OpenSSL AND MIT"
+license-files = [
+    { path = "LICENSE", hash = 3171872035 },
+]
 
 [[licenses.clarify]]
 name = "encoding_rs"

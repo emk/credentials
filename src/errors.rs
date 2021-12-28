@@ -1,7 +1,5 @@
 //! Various error types used internally, and in our public APIs.
 
-use reqwest;
-use serde_json;
 use std::env;
 use std::io;
 use std::path::PathBuf;
@@ -16,22 +14,24 @@ pub type Result<T> = result::Result<T, Error>;
 pub enum Error {
     /// Could not access a secure credential.
     #[non_exhaustive]
-    #[error("can't access secure credential '{name}': {cause}")]
+    #[error("can't access secure credential '{name}': {source}")]
     Credential {
         /// The name of the credential we couldn't access.
         name: String,
         /// The reason why we couldn't access it.
-        cause: Box<Error>,
+        #[source]
+        source: Box<Error>,
     },
 
     /// Could not read file.
     #[non_exhaustive]
-    #[error("problem reading file {}: {cause}", path.display())]
+    #[error("problem reading file {}: {source}", path.display())]
     FileRead {
         /// The file we couldn't access.
         path: PathBuf,
         /// The reason why we couldn't access it.
-        cause: Box<Error>,
+        #[source]
+        source: Box<Error>,
     },
 
     /// We encountered an invalid URL.
@@ -45,12 +45,12 @@ pub enum Error {
     /// An error occurred doing I/O.
     #[non_exhaustive]
     #[error("I/O error: {0}")]
-    Io(#[source] io::Error),
+    Io(#[from] io::Error),
 
     /// We failed to parse JSON data.
     #[non_exhaustive]
     #[error("could not parse JSON: {0}")]
-    Json(#[source] serde_json::Error),
+    Json(#[from] serde_json::Error),
 
     /// Missing entry in Secretfile.
     #[non_exhaustive]
@@ -121,13 +121,13 @@ pub enum Error {
 
     /// Undefined environment variable.
     #[non_exhaustive]
-    #[error("undefined environment variable {name:?}: {cause}")]
+    #[error("undefined environment variable {name:?}: {source}")]
     UndefinedEnvironmentVariable {
         /// The name of the environment variable.
         name: String,
         /// The error we encountered.
         #[source]
-        cause: env::VarError,
+        source: env::VarError,
     },
 
     /// Unexpected HTTP status.
@@ -142,39 +142,16 @@ pub enum Error {
 
     /// We failed to parse a URL.
     #[error("could not parse URL: {0}")]
-    UnparseableUrl(#[source] reqwest::UrlError),
+    UnparseableUrl(#[from] url::ParseError),
 
     /// Could not access URL.
     #[non_exhaustive]
-    #[error("could not access URL '{url}': {cause}")]
+    #[error("could not access URL '{url}': {source}")]
     Url {
         /// The URL we couldn't access.
         url: reqwest::Url,
         /// The reason we couldn't access it.
-        cause: Box<Error>,
+        #[source]
+        source: Box<Error>,
     },
-
-    /// We reserve the right to add new errors to this `enum` without
-    /// considering it a breaking API chance.
-    #[doc(hidden)]
-    #[error("this error should never occur (nonexclusive)")]
-    __Nonexclusive,
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Self {
-        Error::Io(err)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(err: serde_json::Error) -> Self {
-        Error::Json(err)
-    }
-}
-
-impl From<reqwest::UrlError> for Error {
-    fn from(err: reqwest::UrlError) -> Self {
-        Error::UnparseableUrl(err)
-    }
 }

@@ -1,9 +1,6 @@
-use reqwest;
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::env;
 use std::fs;
-use std::io::prelude::*;
 use std::path::Path;
 
 use crate::errors::*;
@@ -18,7 +15,7 @@ const KUBERNETES_TOKEN_PATH: &str =
 fn kubernetes_jwt() -> Result<String> {
     fs::read_to_string(KUBERNETES_TOKEN_PATH).map_err(|err| Error::FileRead {
         path: Path::new(KUBERNETES_TOKEN_PATH).to_owned(),
-        cause: Box::new(err.into()),
+        source: Box::new(err.into()),
     })
 }
 
@@ -44,7 +41,8 @@ struct VaultAuth {
 }
 
 /// Authenticate against the specified Kubernetes auth endpoint.
-fn auth(
+#[tracing::instrument(level = "trace", skip(client, jwt))]
+async fn auth(
     client: reqwest::Client,
     addr: &reqwest::Url,
     auth_path: &str,
@@ -55,9 +53,9 @@ fn auth(
     let payload = VaultKubernetesLogin { role, jwt };
     let mkerr = |err| Error::Url {
         url: url.to_owned(),
-        cause: Box::new(err),
+        source: Box::new(err),
     };
-    let mut res = client
+    let res = client
         .post(url.clone())
         // Leaving the connection open will cause errors on reconnect
         // after inactivity.
@@ -66,19 +64,25 @@ fn auth(
         .header("Connection", "close")
         .body(serde_json::to_vec(&payload)?)
         .send()
+        .await
         .map_err(|err| (&mkerr)(Error::Other(err.into())))?;
-
-    // Read our HTTP body.
-    let mut body = String::new();
-    res.read_to_string(&mut body)?;
 
     if res.status().is_success() {
         // Parse our body and get the auth token.
-        let auth_res: VaultAuthResponse = serde_json::from_str(&body)?;
+        // Read our HTTP body.
+        let auth_res = res
+            .json::<VaultAuthResponse>()
+            .await
+            .map_err(|err| (&mkerr)(Error::Other(err.into())))?;
         Ok(auth_res.auth.client_token)
     } else {
         // Generate informative errors for HTTP failures.
         let status = res.status().to_owned();
+        let body = res
+            .text()
+            .await
+            .map_err(|err| (&mkerr)(Error::Other(err.into())))?;
+
         Err(mkerr(Error::UnexpectedHttpStatus {
             status,
             body: body.trim().to_owned(),
@@ -88,7 +92,9 @@ fn auth(
 
 /// If `VAULT_KUBERNETES_ROLE` is set, attempt to get a Vault token by
 /// logging into Vault using our Kubernetes credentials.
-pub(crate) fn vault_kubernetes_token(addr: &reqwest::Url) -> Result<Option<String>> {
+pub(crate) async fn vault_kubernetes_token(
+    addr: &reqwest::Url,
+) -> Result<Option<String>> {
     let role = match env::var("VAULT_KUBERNETES_ROLE") {
         Ok(role) => role,
         Err(_) => return Ok(None),
@@ -97,5 +103,5 @@ pub(crate) fn vault_kubernetes_token(addr: &reqwest::Url) -> Result<Option<Strin
         .unwrap_or_else(|_| "kubernetes".to_owned());
     let jwt = kubernetes_jwt()?;
     let client = reqwest::Client::new();
-    Ok(Some(auth(client, addr, &auth_path, &role, &jwt)?))
+    Ok(Some(auth(client, addr, &auth_path, &role, &jwt).await?))
 }

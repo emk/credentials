@@ -54,11 +54,11 @@ fn interpolate_env(text: &str) -> Result<String> {
             .unwrap()
             .as_str();
         match env::var(name) {
-            Ok(s) => s.to_owned(),
+            Ok(s) => s,
             Err(env_err) => {
                 err = Some(Error::UndefinedEnvironmentVariable {
                     name: name.to_owned(),
-                    cause: env_err,
+                    source: env_err,
                 });
                 "".to_owned()
             }
@@ -85,7 +85,7 @@ pub enum Location {
 impl Location {
     /// Create a new `Location` from a regex `Captures` containing the
     /// named match `path` and optionally `key`.
-    fn from_caps<'a>(caps: &Captures<'a>) -> Result<Location> {
+    fn from_caps(caps: &Captures<'_>) -> Result<Location> {
         let path_opt = caps.name("path").map(|m| m.as_str());
         let key_opt = caps.name("key").map(|m| m.as_str());
         match (path_opt, key_opt) {
@@ -176,11 +176,11 @@ impl Secretfile {
         let path = path.as_ref();
         let mut file = File::open(path).map_err(|err| Error::FileRead {
             path: path.to_owned(),
-            cause: Box::new(err.into()),
+            source: Box::new(err.into()),
         })?;
         Secretfile::read(&mut file).map_err(|err| Error::FileRead {
             path: path.to_owned(),
-            cause: Box::new(err),
+            source: Box::new(err),
         })
     }
 
@@ -289,14 +289,14 @@ fn test_parse() {
     let data = "\
 # This is a comment.
 
-FOO_USERNAME secret/$SECRET_NAME:username\n\
-FOO_PASSWORD secret/${SECRET_NAME}:password\n\
+FOO_USERNAME secret/$SECRET_NAME:username
+FOO_PASSWORD secret/${SECRET_NAME}:password
 
 # Try a Keywhiz-style secret, too.
-FOO_USERNAME2 ${SECRET_NAME}_username\n\
+FOO_USERNAME2 ${SECRET_NAME}_username
 
 # Credentials to copy to a file.  Interpolation allowed on the left here.
->$SOMEDIR/.conf/key.pem secret/ssl:key_pem\n\
+>$SOMEDIR/.conf/key.pem secret/ssl:key_pem
 ";
     env::set_var("SECRET_NAME", "foo");
     env::set_var("SOMEDIR", "/home/foo");

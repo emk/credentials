@@ -1,6 +1,6 @@
 //! Backend which tries multiple other backends, in sequence.
 
-use log::debug;
+use tracing::debug;
 
 use crate::backend::Backend;
 use crate::envvar;
@@ -26,13 +26,13 @@ impl Client {
     }
 
     /// Set up the standard chain, based on what appears to be available.
-    pub fn with_default_backends(allow_override: bool) -> Result<Client> {
+    pub async fn with_default_backends(allow_override: bool) -> Result<Client> {
         let mut client = Client::new();
         if vault::Client::is_enabled() {
             if allow_override {
                 client.add(envvar::Client::default()?);
             }
-            client.add(vault::Client::default()?);
+            client.add(vault::Client::default().await?);
         } else {
             client.add(envvar::Client::default()?);
         }
@@ -44,16 +44,22 @@ impl Client {
     }
 }
 
+#[async_trait::async_trait]
 impl Backend for Client {
     fn name(&self) -> &'static str {
         "chained"
     }
 
-    fn var(&mut self, secretfile: &Secretfile, credential: &str) -> Result<String> {
+    #[tracing::instrument(level = "debug", skip(self, secretfile))]
+    async fn var(
+        &mut self,
+        secretfile: &Secretfile,
+        credential: &str,
+    ) -> Result<String> {
         // We want to return either the first success or the last error.
         let mut err: Option<Error> = None;
         for backend in self.backends.iter_mut() {
-            match backend.var(secretfile, credential) {
+            match backend.var(secretfile, credential).await {
                 Ok(value) => {
                     return Ok(value);
                 }
@@ -65,11 +71,12 @@ impl Backend for Client {
         Err(err.unwrap_or(Error::NoBackend))
     }
 
-    fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String> {
+    #[tracing::instrument(level = "debug", skip(self, secretfile))]
+    async fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String> {
         // We want to return either the first success or the last error.
         let mut err: Option<Error> = None;
         for backend in self.backends.iter_mut() {
-            match backend.file(secretfile, path) {
+            match backend.file(secretfile, path).await {
                 Ok(value) => {
                     return Ok(value);
                 }
@@ -101,12 +108,13 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
     impl Backend for DummyClient {
         fn name(&self) -> &'static str {
             "dummy"
         }
 
-        fn var(
+        async fn var(
             &mut self,
             _secretfile: &Secretfile,
             credential: &str,
@@ -118,7 +126,11 @@ mod tests {
             }
         }
 
-        fn file(&mut self, _secretfile: &Secretfile, path: &str) -> Result<String> {
+        async fn file(
+            &mut self,
+            _secretfile: &Secretfile,
+            path: &str,
+        ) -> Result<String> {
             if path == "dummy.txt" {
                 Ok("dummy2".to_owned())
             } else {
@@ -127,19 +139,19 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_chaining() {
+    #[tokio::test]
+    async fn test_chaining() {
         let sf = Secretfile::from_str("").unwrap();
         let mut client = Client::new();
         client.add(envvar::Client::default().unwrap());
         client.add(DummyClient::default().unwrap());
 
         env::set_var("FOO_USERNAME", "user");
-        assert_eq!("user", client.var(&sf, "FOO_USERNAME").unwrap());
-        assert_eq!("dummy", client.var(&sf, "DUMMY").unwrap());
-        assert!(client.var(&sf, "NOSUCHVAR").is_err());
+        assert_eq!("user", client.var(&sf, "FOO_USERNAME").await.unwrap());
+        assert_eq!("dummy", client.var(&sf, "DUMMY").await.unwrap());
+        assert!(client.var(&sf, "NOSUCHVAR").await.is_err());
 
-        assert_eq!("dummy2", client.file(&sf, "dummy.txt").unwrap());
-        assert!(client.file(&sf, "nosuchfile.txt").is_err());
+        assert_eq!("dummy2", client.file(&sf, "dummy.txt").await.unwrap());
+        assert!(client.file(&sf, "nosuchfile.txt").await.is_err());
     }
 }

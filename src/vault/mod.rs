@@ -1,14 +1,12 @@
 //! A very basic client for Hashicorp's Vault
 
-use dirs;
-use log::debug;
 use reqwest::{self, Url};
 use serde::Deserialize;
-use serde_json;
 use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use tracing::debug;
 
 use crate::backend::Backend;
 use crate::errors::*;
@@ -24,14 +22,14 @@ fn default_addr() -> Result<String> {
 }
 
 /// The default vault token.
-fn default_token(addr: &reqwest::Url) -> Result<String> {
-    // Wrap everything in a local function and call it so that
-    // we can wrap all errors in a custom type.
-    (|| -> Result<String> {
+async fn default_token(addr: &reqwest::Url) -> Result<String> {
+    // Wrap everything in a local async block and await it so that we can wrap
+    // all errors in a custom type.
+    let fut = async {
         if let Ok(token) = env::var("VAULT_TOKEN") {
             // The env var `VAULT_TOKEN` overrides everything.
             Ok(token)
-        } else if let Some(token) = vault_kubernetes_token(addr)? {
+        } else if let Some(token) = vault_kubernetes_token(addr).await? {
             // We were able to get a token using our Kubernetes JWT
             // token.
             Ok(token)
@@ -46,8 +44,9 @@ fn default_token(addr: &reqwest::Url) -> Result<String> {
             f.read_to_string(&mut token)?;
             Ok(token)
         }
-    })()
-    .map_err(|err| Error::MissingVaultToken(Box::new(err)))
+    };
+    fut.await
+        .map_err(|err| Error::MissingVaultToken(Box::new(err)))
 }
 
 /// Secret data retrieved from Vault.  This has a bunch more fields, but
@@ -58,6 +57,7 @@ struct Secret {
     /// The key-value pairs associated with this secret.
     data: BTreeMap<String, String>,
     // How long this secret will remain valid for, in seconds.
+    #[allow(dead_code)]
     lease_duration: u64,
 }
 
@@ -82,10 +82,10 @@ impl Client {
     /// Construct a new vault::Client, attempting to use the same
     /// environment variables and files used by the `vault` CLI tool and
     /// the Ruby `vault` gem.
-    pub fn default() -> Result<Client> {
+    pub async fn default() -> Result<Client> {
         let client = reqwest::Client::new();
         let addr = default_addr()?.parse()?;
-        let token = default_token(&addr)?;
+        let token = default_token(&addr).await?;
         Client::new(client, addr, token)
     }
 
@@ -104,15 +104,15 @@ impl Client {
     }
 
     /// Fetch a secret from the Vault server.
-    fn get_secret(&self, path: &str) -> Result<Secret> {
+    async fn get_secret(&self, path: &str) -> Result<Secret> {
         let url = self.addr.join(&format!("v1/{}", path))?;
         debug!("Getting secret {}", url);
 
         let mkerr = |err| Error::Url {
             url: url.clone(),
-            cause: Box::new(err),
+            source: Box::new(err),
         };
-        let mut res = self
+        let res = self
             .client
             .get(url.clone())
             // Leaving the connection open will cause errors on reconnect
@@ -120,19 +120,24 @@ impl Client {
             .header("Connection", "close")
             .header("X-Vault-Token", &self.token[..])
             .send()
+            .await
             .map_err(|err| (&mkerr)(Error::Other(err.into())))?;
 
-        // Read our HTTP body.
-        let mut body = String::new();
-        res.read_to_string(&mut body)?;
-
         if res.status().is_success() {
-            Ok(serde_json::from_str(&body)?)
+            Ok(res
+                .json()
+                .await
+                .map_err(|err| (&mkerr)(Error::Other(err.into())))?)
         } else {
             // Generate informative errors for HTTP failures, because these can
             // be caused by everything from bad URLs to overly restrictive vault
             // policies.
             let status = res.status().to_owned();
+            let body = res
+                .text()
+                .await
+                .map_err(|err| (&mkerr)(Error::Other(err.into())))?;
+
             Err(mkerr(Error::UnexpectedHttpStatus {
                 status,
                 body: body.trim().to_owned(),
@@ -140,7 +145,7 @@ impl Client {
         }
     }
 
-    fn get_loc(
+    async fn get_loc(
         &mut self,
         searched_for: &str,
         loc: Option<Location>,
@@ -156,7 +161,7 @@ impl Client {
                 // secret, and fetching the secret once per key will result
                 // in mismatched username/password pairs or whatever.
                 if !self.secrets.contains_key(path) {
-                    let secret = self.get_secret(path)?;
+                    let secret = self.get_secret(path).await?;
                     self.secrets.insert(path.to_owned(), secret);
                 }
 
@@ -181,19 +186,26 @@ impl Client {
     }
 }
 
+#[async_trait::async_trait]
 impl Backend for Client {
     fn name(&self) -> &'static str {
         "vault"
     }
 
-    fn var(&mut self, secretfile: &Secretfile, credential: &str) -> Result<String> {
+    #[tracing::instrument(level = "trace", skip(self, secretfile))]
+    async fn var(
+        &mut self,
+        secretfile: &Secretfile,
+        credential: &str,
+    ) -> Result<String> {
         let loc = secretfile.var(credential).cloned();
-        self.get_loc(credential, loc)
+        self.get_loc(credential, loc).await
     }
 
-    fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String> {
+    #[tracing::instrument(level = "trace", skip(self, secretfile))]
+    async fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String> {
         let loc = secretfile.file(path).cloned();
-        self.get_loc(path, loc)
+        self.get_loc(path, loc).await
     }
 }
 

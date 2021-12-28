@@ -1,9 +1,9 @@
 //! A backend which reads from environment variables.
 
-use log::debug;
 use std::env;
 use std::fs;
 use std::io::Read;
+use tracing::debug;
 
 use crate::backend::Backend;
 use crate::errors::*;
@@ -25,6 +25,7 @@ impl Backend for Client {
         "env"
     }
 
+    #[tracing::instrument(level = "trace", skip(self, _secretfile))]
     async fn var(
         &mut self,
         _secretfile: &Secretfile,
@@ -40,6 +41,7 @@ impl Backend for Client {
         Ok(value)
     }
 
+    #[tracing::instrument(level = "trace", skip(self, _secretfile))]
     async fn file(&mut self, _secretfile: &Secretfile, path: &str) -> Result<String> {
         let mut f = fs::File::open(path)?;
         let mut contents = String::new();

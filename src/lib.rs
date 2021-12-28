@@ -19,7 +19,6 @@
 
 use backend::Backend;
 use lazy_static::lazy_static;
-use log::trace;
 use std::convert::AsRef;
 use std::default::Default;
 use std::future::Future;
@@ -27,6 +26,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::trace;
 
 // Be very careful not to export any more of the Secretfile API than
 // strictly necessary, because we don't want to stablize too much at this

@@ -12,3 +12,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All relevant APIs are now `async`. This includes `credentials::var` and `credentials::file`. We use the `tokio` async runtime.
 - `credentials::Error` type now uses `source` instead of `cause`.
 - By default, we no longer choose an appropriate `reqwest` backend for `https`. You can enable one using `features = ["default-tls"]`, or you can directly include `reqwest` and pass `features` of your choice.
+- We use `tracing` for logging instead of `log`, mirroring the larger `tokio` ecosystem.

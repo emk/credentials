@@ -41,6 +41,7 @@ struct VaultAuth {
 }
 
 /// Authenticate against the specified Kubernetes auth endpoint.
+#[tracing::instrument(level = "trace", skip(client, jwt))]
 async fn auth(
     client: reqwest::Client,
     addr: &reqwest::Url,

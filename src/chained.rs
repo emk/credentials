@@ -1,6 +1,6 @@
 //! Backend which tries multiple other backends, in sequence.
 
-use log::debug;
+use tracing::debug;
 
 use crate::backend::Backend;
 use crate::envvar;
@@ -50,6 +50,7 @@ impl Backend for Client {
         "chained"
     }
 
+    #[tracing::instrument(level = "debug", skip(self, secretfile))]
     async fn var(
         &mut self,
         secretfile: &Secretfile,
@@ -70,6 +71,7 @@ impl Backend for Client {
         Err(err.unwrap_or(Error::NoBackend))
     }
 
+    #[tracing::instrument(level = "debug", skip(self, secretfile))]
     async fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String> {
         // We want to return either the first success or the last error.
         let mut err: Option<Error> = None;

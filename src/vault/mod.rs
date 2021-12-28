@@ -1,12 +1,12 @@
 //! A very basic client for Hashicorp's Vault
 
-use log::debug;
 use reqwest::{self, Url};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use tracing::debug;
 
 use crate::backend::Backend;
 use crate::errors::*;
@@ -192,6 +192,7 @@ impl Backend for Client {
         "vault"
     }
 
+    #[tracing::instrument(level = "trace", skip(self, secretfile))]
     async fn var(
         &mut self,
         secretfile: &Secretfile,
@@ -201,6 +202,7 @@ impl Backend for Client {
         self.get_loc(credential, loc).await
     }
 
+    #[tracing::instrument(level = "trace", skip(self, secretfile))]
     async fn file(&mut self, secretfile: &Secretfile, path: &str) -> Result<String> {
         let loc = secretfile.file(path).cloned();
         self.get_loc(path, loc).await

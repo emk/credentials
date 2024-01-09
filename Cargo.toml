@@ -10,6 +10,8 @@ version = "1.0.0-beta.1"
 edition = "2018"
 
 [features]
+default = ["default-tls"]
+
 default-tls = ["rustls-tls-webpki-roots"]
 rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
 rustls-tls-webpki-roots = ["reqwest/rustls-tls-webpki-roots"]

@@ -54,11 +54,33 @@ async fn default_token(addr: &reqwest::Url) -> Result<String> {
 /// let's be conservative.
 #[derive(Debug, Deserialize)]
 struct Secret {
-    /// The key-value pairs associated with this secret.
-    data: BTreeMap<String, String>,
+    /// The contents of this secret. The format of this data is specific
+    /// to the secret backend.
+    data: SecretData,
     // How long this secret will remain valid for, in seconds.
     #[allow(dead_code)]
+    // Defensively default to 0 on backwards-incompatible format changes
+    #[serde(default)]
     lease_duration: u64,
+}
+
+/// Secret data returned by a secret backend.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum SecretData {
+    /// A simple key-value map. This is the format returned by the KVv1 and Cubbyhole engines.
+    Generic(BTreeMap<String, String>),
+    /// A simple key-value map, wrapped as a value of an object with a `data` key. This is the
+    /// format returned by the KVv2 engine.
+    KVv2 { data: BTreeMap<String, String> },
+}
+
+impl SecretData {
+    fn get(&self, key: &str) -> Option<&String> {
+        match self {
+            Self::Generic(map) | Self::KVv2 { data: map } => map.get(key),
+        }
+    }
 }
 
 /// A basic Vault client.

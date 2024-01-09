@@ -1,3 +1,8 @@
+# dev dependencies are not linked for crate users, and currently
+# cause lots of multiple version warning noise for Windows API
+# crates
+exclude-dev = true
+
 [licenses]
 # Don't allow code with an unclear license.
 unlicensed = "deny"
@@ -7,7 +12,7 @@ copyleft = "deny"
 
 # Allow common non-restrictive licenses. ISC is used for various DNS and crypto
 # things, and it's a minimally restrictive open source license.
-allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "CC0-1.0", "ISC", "OpenSSL", "Zlib"]
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "CC0-1.0", "ISC", "OpenSSL", "Zlib", "Unicode-DFS-2016"]
 
 # Many organizations ban AGPL-licensed code
 # https://opensource.google/docs/using/agpl-policy/
@@ -36,9 +41,4 @@ deny = [
     # OpenSSL has caused endless deployment and build problems, and we want
     # nothing to do with it, in any version.
     { name = "openssl-sys" },
-]
-
-skip = [
-    # Several libraries still use the old version.
-    { name = "itoa", version = "0.4.8"},
 ]

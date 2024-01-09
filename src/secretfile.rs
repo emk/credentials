@@ -5,9 +5,8 @@
 //! keys: from `MY_SECRET_PASSWORD` to the path `secret/my_secret` and the
 //! key `"password"`.
 
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
-use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap};
 use std::env;
 use std::fs::File;
@@ -19,30 +18,27 @@ use std::sync::Mutex;
 
 use crate::errors::*;
 
-lazy_static! {
-    // For command-line binaries used directly by users, it may occasionally be
-    // desirable to build a `Secretfile` directly into an executable.
-    //
-    // For an explanation of `lazy_static!`, `Mutex` and the other funky Rust
-    // stuff going on here, see `CLIENT` in `lib.rs`.
-    static ref BUILT_IN_SECRETFILE: Mutex<RefCell<Option<Secretfile>>> =
-        Mutex::new(RefCell::new(None));
-}
+// For command-line binaries used directly by users, it may occasionally be
+// desirable to build a `Secretfile` directly into an executable.
+//
+// For an explanation of `Lazy` and `Mutex, see `CLIENT` in `lib.rs`.
+static BUILT_IN_SECRETFILE: Lazy<Mutex<Option<Secretfile>>> =
+    Lazy::new(|| Mutex::new(None));
 
 /// Interpolate environment variables into a string.
 fn interpolate_env(text: &str) -> Result<String> {
     // Only compile this Regex once.
-    lazy_static! {
-        static ref RE: Regex = Regex::new(
+    static RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(
             r"(?x)
 \$(?:
     (?P<name>[a-zA-Z_][a-zA-Z0-9_]*)
   |
     \{(?P<name2>[a-zA-Z_][a-zA-Z0-9_]*)\}
-  )"
+  )",
         )
-        .unwrap();
-    }
+        .unwrap()
+    });
 
     // Perform the replacement.  This is mostly error-handling logic,
     // because `replace_all` doesn't anticipate any errors.
@@ -113,9 +109,8 @@ pub struct Secretfile {
 impl Secretfile {
     fn read_internal(read: &mut dyn io::Read) -> Result<Secretfile> {
         // Only compile this Regex once.
-        lazy_static! {
-            // Match an individual line in a Secretfile.
-            static ref RE: Regex = Regex::new(r"(?x)
+        // Match an individual line in a Secretfile.
+        static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?x)
 ^(?:
    # Blank line with optional comment.
    \s*(?:\#.*)?
@@ -131,8 +126,7 @@ impl Secretfile {
    # path/to/secret:key
    (?P<path>\S+?)(?::(?P<key>\S+))?
    \s*
- )$").unwrap();
-        }
+ )$").unwrap());
 
         let mut sf = Secretfile {
             varmap: BTreeMap::new(),
@@ -191,10 +185,10 @@ impl Secretfile {
     ///
     /// This must be called before `credentials::var`.
     pub fn set_built_in(secretfile: Option<Secretfile>) {
-        let guard = BUILT_IN_SECRETFILE
+        let mut guard = BUILT_IN_SECRETFILE
             .lock()
             .expect("Unable to lock `BUILT_IN_SECRETFILE`");
-        *guard.borrow_mut() = secretfile;
+        *guard = secretfile;
     }
 
     /// Load the default `Secretfile`. This is normally `Secretfile` in the
@@ -206,7 +200,7 @@ impl Secretfile {
         let guard = BUILT_IN_SECRETFILE
             .lock()
             .expect("Unable to lock `BUILT_IN_SECRETFILE`");
-        let built_in_opt = guard.borrow().to_owned();
+        let built_in_opt = guard.to_owned();
         if let Some(built_in) = built_in_opt {
             Ok(built_in)
         } else {

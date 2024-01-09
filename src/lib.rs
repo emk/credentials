@@ -18,13 +18,12 @@
 #![allow(clippy::redundant_closure)]
 
 use backend::Backend;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use std::convert::AsRef;
 use std::default::Default;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
-use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::trace;
 
@@ -146,20 +145,16 @@ impl Client {
     }
 }
 
-lazy_static! {
-    // Our shared global client, initialized by `lazy_static!` and
-    // protected by a Mutex.
-    //
-    // Rust deliberately makes it a nuisance to use mutable global
-    // variables.  In this case, the `Mutex` provides thread-safe locking,
-    // the `RefCell` makes this assignable, and the `Option` makes this
-    // optional.  This is a message from the language saying, "Really? A
-    // mutable global that might be null? Have you really thought about
-    // this?"  But the global default client is only for convenience, so
-    // we're OK with it, at least so far.
-    static ref CLIENT: Arc<Mutex<Option<Client>>> =
-        Arc::new(Mutex::new(None));
-}
+// Our shared global client.
+//
+// Rust deliberately makes it a nuisance to use mutable global
+// variables.  In this case, the `Mutex` provides thread-safe locking
+// and write access, and the `Option` makes this optional.  This is a
+// message from the language saying, "Really? A mutable global that
+// might be null? Have you really thought about this?"  But the global
+// default client is only for convenience, so we're OK with it, at least
+// so far.
+static CLIENT: Lazy<Mutex<Option<Client>>> = Lazy::new(|| Mutex::new(None));
 
 /// Call `body` with the default global client, or return an error if we can't
 /// allocate a default global client.
@@ -174,17 +169,17 @@ where
     )
         -> Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>>,
 {
-    let mut client_cell = CLIENT.clone().lock_owned().await;
+    let mut client = CLIENT.lock().await;
 
     // Try to set up the client if we haven't already.
-    if client_cell.is_none() {
-        *client_cell = Some(Client::default().await?);
+    if client.is_none() {
+        *client = Some(Client::default().await?);
     }
 
     // Call the provided function.  I have to break out `result` separately
     // for mysterious reasons related to the borrow checker and global
     // mutable state.
-    match client_cell.as_mut() {
+    match client.as_mut() {
         Some(client) => body(client).await,
         // We theoretically handed this just above, and exited if we
         // failed.

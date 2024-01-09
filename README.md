@@ -11,7 +11,7 @@ which would make it much easier to accidentally reveal them to the world.
 
 But once your application deployment becomes more complex, it's much easier
 to store passwords in a central, secure store such as Hashicorp's
-[Vault][vault] or Square's [Keywhiz][keywhiz].
+[Vault][vault].
 
 Wherever you choose to store your secrets, this library is intended to
 provide a single, unified API:

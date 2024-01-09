@@ -35,7 +35,7 @@ async fn default_token(addr: &reqwest::Url) -> Result<String> {
             Ok(token)
         } else {
             // Build a path to ~/.vault-token.
-            let mut path = dirs::home_dir().ok_or(Error::NoHomeDirectory)?;
+            let mut path = home::home_dir().ok_or(Error::NoHomeDirectory)?;
             path.push(".vault-token");
 
             // Read the file.
